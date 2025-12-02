@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI 对话平台</title>
+  <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+
+<body class="min-h-screen bg-gray-100 text-gray-900">
+  <div id="app" class="flex h-screen">
+    <aside id="sidebar" class="w-64 bg-white border-r overflow-y-auto hidden md:block">
+      <div class="p-4 flex items-center justify-between">
+        <h2 class="text-lg font-semibold">会话</h2>
+        <button id="newConv" class="px-2 py-1 text-sm bg-blue-600 text-white rounded">新建</button>
+      </div>
+      <div class="p-2">
+        <input id="searchConv" class="w-full border rounded px-2 py-1" placeholder="搜索会话">
+      </div>
+      <ul id="convList" class="p-2 space-y-1"></ul>
+    </aside>
+    <main class="flex-1 flex flex-col">
+      <header class="bg-white border-b p-3 flex items-center justify-between">
+        <div>
+          <span id="userName" class="font-medium"></span>
+          <span id="status" class="ml-2 text-xs text-gray-500"></span>
+        </div>
+        <div class="space-x-2">
+          <button id="toggleSidebar" class="px-2 py-1 text-sm border rounded md:hidden">侧边栏</button>
+          <button id="openSettings" class="px-2 py-1 text-sm border rounded">设置</button>
+          <button id="logout" class="px-2 py-1 text-sm border rounded">退出</button>
+        </div>
+      </header>
+      <section id="chat" class="flex-1 overflow-y-auto p-4 space-y-3"></section>
+      <footer class="p-3 bg-white border-t">
+        <div class="flex items-end space-x-2">
+          <textarea id="input" rows="3" class="flex-1 border rounded p-2" placeholder="支持 Markdown"></textarea>
+          <div class="flex flex-col items-center space-y-1">
+            <label class="text-xs text-gray-500 flex items-center space-x-1 cursor-pointer select-none">
+              <input type="checkbox" id="thinkingToggle">
+              <span>思考</span>
+            </label>
+            <button id="send" class="px-4 py-2 bg-blue-600 text-white rounded">发送</button>
+          </div>
+        </div>
+        <div id="sendState" class="text-xs text-gray-500 mt-1"></div>
+      </footer>
+    </main>
+  </div>
+
+  <div id="authPanel" class="fixed inset-0 bg-white flex items-center justify-center">
+    <div class="w-full max-w-sm p-6 border rounded bg-white shadow">
+      <h2 class="text-lg font-semibold mb-3">登录</h2>
+      <div class="space-y-2">
+        <input id="loginEmail" class="w-full border rounded px-2 py-1" placeholder="邮箱">
+        <input id="loginPassword" type="password" class="w-full border rounded px-2 py-1" placeholder="密码">
+        <button id="loginBtn" class="w-full px-4 py-2 bg-blue-600 text-white rounded">登录</button>
+      </div>
+<!--      <div class="mt-4 text-sm text-gray-600">-->
+<!--        没有账号？<button id="showRegister" class="text-blue-600">去注册</button>-->
+<!--      </div>-->
+      <div id="authError" class="mt-2 text-sm text-red-600"></div>
+    </div>
+  </div>
+
+  <div id="registerPanel" class="hidden fixed inset-0 bg-white flex items-center justify-center">
+    <div class="w-full max-w-sm p-6 border rounded bg-white shadow">
+      <h2 class="text-lg font-semibold mb-3">注册</h2>
+      <div class="space-y-2">
+        <input id="regName" class="w-full border rounded px-2 py-1" placeholder="昵称">
+        <input id="regEmail" class="w-full border rounded px-2 py-1" placeholder="邮箱">
+        <input id="regPassword" type="password" class="w-full border rounded px-2 py-1" placeholder="密码(≥6)">
+        <button id="registerBtn" class="w-full px-4 py-2 bg-green-600 text-white rounded">注册</button>
+      </div>
+      <div class="mt-2 text-sm text-red-600" id="registerError"></div>
+    </div>
+  </div>
+
+  <div id="settingsPanel" class="hidden fixed inset-0 bg-black/20 items-center justify-center">
+    <div class="w-full max-w-md p-6 border rounded bg-white shadow">
+      <h2 class="text-lg font-semibold mb-3">设置</h2>
+      <div class="space-y-3">
+        <div>
+          <label class="block text-sm">主题</label>
+          <select id="theme" class="border rounded px-2 py-1">
+            <option value="light">亮色</option>
+            <option value="dark">暗色</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm">通知偏好</label>
+          <label class="inline-flex items-center space-x-2"><input id="notifyDisconnect" type="checkbox">
+            <span>连接断开提示</span></label>
+        </div>
+      </div>
+      <div class="mt-4 text-right">
+        <button id="closeSettings" class="px-4 py-2 border rounded">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.1/marked.min.js"></script>
+  <script type="module" src="/static/app.js"></script>
+</body>
+
+</html>

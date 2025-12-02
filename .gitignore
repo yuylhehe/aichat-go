@@ -1,0 +1,12 @@
+.idea
+.vscode
+.trae
+
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+
+logs
+*.log
