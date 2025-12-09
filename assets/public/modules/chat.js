@@ -1,290 +1,434 @@
-import { api } from './api.js';
-import { ui } from './ui.js';
+import { API } from "./api.js";
+import { Store } from "./store.js";
+import { UI } from "./ui.js";
+import { API_BASE } from "./config.js";
 
-let currentAssistantContent = null;
-let assistantBuffer = '';
-let es;
+export const Chat = {
+  renamingId: null,
 
-export function initChat() {
-  ui.newConv.onclick = handleNewConv;
-  ui.searchConv.oninput = () => loadConversations(ui.searchConv.value.trim());
-  ui.send.onclick = handleSend;
-}
+  init() {
+    this.bindEvents();
 
-export async function loadConversations(q) {
-  const list = await api.get(
-    `/conversations${q ? `?q=${encodeURIComponent(q)}` : ''}`,
-  );
-  ui.convList.innerHTML = '';
-  list.items.forEach((c) => {
-    const li = document.createElement('li');
-    li.dataset.id = c.id;
-    li.className =
-      'px-3 py-2 rounded hover:bg-gray-100 flex items-center justify-between';
-    li.innerHTML = `<span>${c.name}</span>
-    <div class="space-x-2">
-    <button data-id="${c.id}" class="pin px-2 py-1 text-xs border rounded">置顶</button>
-    <button data-id="${c.id}" class="del px-2 py-1 text-xs border rounded">删除</button>
-    </div>`;
-    li.onclick = (e) => {
+    // Listen to Auth events
+    window.addEventListener("auth:login", () => this.loadConversations());
+    window.addEventListener("auth:logout", () => this.clearChat());
+  },
+
+  bindEvents() {
+    UI.newChatBtn.onclick = () => this.startNewChat();
+    UI.sendBtn.onclick = () => this.sendMessage();
+
+    // Close dropdowns when clicking outside
+    document.addEventListener("click", (e) => {
+      if (!e.target.closest(".menu-trigger")) {
+        document
+          .querySelectorAll(".menu-dropdown")
+          .forEach((el) => el.classList.add("hidden"));
+      }
+    });
+
+    // Auto-resize textarea
+    UI.chatInput.addEventListener("input", function () {
+      this.style.height = "auto";
+      this.style.height = this.scrollHeight + "px";
+      if (this.value === "") this.style.height = "auto";
+
+      // Enable/disable send button
+      UI.sendBtn.disabled = !this.value.trim() || Store.isGenerating;
+      if (this.value.trim() && !Store.isGenerating) {
+        UI.sendBtn.classList.remove("opacity-30");
+      } else {
+        UI.sendBtn.classList.add("opacity-30");
+      }
+    });
+
+    UI.chatInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        this.sendMessage();
+      }
+    });
+
+    UI.searchConv.oninput = (e) =>
+      this.loadConversations(e.target.value.trim());
+
+    // Sidebar Mobile Toggle
+    UI.menuBtn.onclick = () => {
+      UI.sidebar.classList.remove("-translate-x-full");
+      UI.toggleVisibility(UI.sidebarOverlay, true);
+    };
+
+    UI.sidebarOverlay.onclick = () => {
+      UI.sidebar.classList.add("-translate-x-full");
+      UI.toggleVisibility(UI.sidebarOverlay, false);
+    };
+
+    // Modal Logic
+    const closeModal = () => {
+      UI.modalBackdrop.classList.remove("opacity-100");
+      UI.modalBackdrop.classList.add("opacity-0");
+      setTimeout(() => UI.toggleVisibility(UI.modalBackdrop, false), 300);
+      this.renamingId = null;
+    };
+
+    UI.modalCancel.onclick = closeModal;
+
+    UI.modalConfirm.onclick = async () => {
+      if (this.renamingId) {
+        const newName = UI.modalInput.value.trim();
+        if (newName) {
+          await this.renameConversation(this.renamingId, newName);
+        }
+      }
+      closeModal();
+    };
+  },
+
+  async renameConversation(id, name) {
+    try {
+      await API.put(`/conversations/${id}`, { name });
+      this.loadConversations();
+    } catch (e) {
+      UI.showToast(e.message, "error");
+    }
+  },
+
+  async loadConversations(q = "") {
+    try {
+      const res = await API.get(
+        `/conversations${q ? `?q=${encodeURIComponent(q)}` : ""}`
+      );
+      const list = res.items || [];
+
+      UI.convList.innerHTML = "";
+      list.forEach((conv) => {
+        const item = this.createConversationItem(conv);
+        UI.convList.appendChild(item);
+      });
+    } catch (e) {
+      console.error(e);
+    }
+  },
+
+  createConversationItem(conv) {
+    const item = document.createElement("div");
+    const isActive = conv.id == Store.currentConversationId;
+    item.className = `group flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors relative ${
+      isActive ? "bg-gray-200" : "hover:bg-gray-100"
+    }`;
+
+    item.innerHTML = `
+            <div class="flex-1 min-w-0">
+                <p class="text-sm font-medium text-gray-900 truncate">${UI.escapeHtml(
+                  conv.name
+                )}</p>
+            </div>
+            <div class="relative">
+                <button class="menu-trigger opacity-0 group-hover:opacity-100 p-1 text-gray-500 hover:text-black transition-all rounded-md hover:bg-gray-200/50" title="Options">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"></path></svg>
+                </button>
+                <div class="menu-dropdown hidden absolute right-0 top-8 w-32 bg-white rounded-lg shadow-xl border border-gray-100 z-50 overflow-hidden py-1">
+                    <button class="rename-btn w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                        Rename
+                    </button>
+                    <button class="delete-btn w-full text-left px-4 py-2 text-xs text-red-600 hover:bg-gray-50 flex items-center gap-2">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        Delete
+                    </button>
+                </div>
+            </div>
+        `;
+
+    item.onclick = (e) => {
+      // Prevent opening if clicking menu elements
       if (
-        e.target.classList.contains('pin') ||
-        e.target.classList.contains('del')
+        e.target.closest(".menu-trigger") ||
+        e.target.closest(".menu-dropdown")
       )
         return;
-      const activeConv = document.querySelector('#convList li.active');
-      if (activeConv) activeConv.classList.remove('active', 'bg-gray-200');
-      li.classList.add('active', 'bg-gray-200');
-      openConversation(c.id);
+
+      this.openConversation(conv.id);
+      // Mobile: close sidebar
+      if (window.innerWidth < 768) {
+        UI.sidebar.classList.add("-translate-x-full");
+        UI.toggleVisibility(UI.sidebarOverlay, false);
+      }
     };
-    li.querySelector('.del').onclick = async (e) => {
+
+    const trigger = item.querySelector(".menu-trigger");
+    const dropdown = item.querySelector(".menu-dropdown");
+    const renameBtn = item.querySelector(".rename-btn");
+    const deleteBtn = item.querySelector(".delete-btn");
+
+    trigger.onclick = (e) => {
       e.stopPropagation();
-      if (!confirm('确定删除吗？')) return;
-      await api.del(`/conversations/${c.id}`);
-      loadConversations(q);
+      // Close others
+      document
+        .querySelectorAll(".menu-dropdown")
+        .forEach((el) => el !== dropdown && el.classList.add("hidden"));
+      dropdown.classList.toggle("hidden");
     };
-    li.querySelector('.pin').onclick = (e) => {
+
+    renameBtn.onclick = (e) => {
       e.stopPropagation();
-      alert('置顶功能后端字段新增后可用');
-    };
-    ui.convList.appendChild(li);
-  });
-}
-
-async function handleNewConv() {
-  const name = prompt('会话名称');
-  if (!name) return;
-  try {
-    const user = await api.get('/users/profile');
-    await api.post('/conversations', { name, userId: user.id });
-    loadConversations();
-  } catch (e) {
-    console.error(e);
-  }
-}
-
-async function openConversation(id) {
-  console.log('openConversation id =', id);
-  ui.chat.innerHTML = '';
-  // 关闭已有的流
-  if (es) {
-      es.close();
-      es = null;
-  }
-  const res = await api.get(`/messages/conversation/${id}`);
-  res.items.forEach(renderMessage);
-}
-
-function renderMessage(m) {
-  const div = document.createElement('div');
-  div.className = `message ${m.type === 'user' ? 'user' : 'assistant'}`;
-  const meta = document.createElement('div');
-  meta.className = 'meta';
-  meta.textContent = `${m.type} · ${new Date(m.createdAt || m.createAt || Date.now()).toLocaleString()}`;
-  
-  const contentWrapper = document.createElement('div');
-  
-  // 渲染思考过程详情（如果存在）
-  if (m.reasoningContent) {
-      const details = document.createElement('details');
-      details.className = 'mb-2 p-2 bg-gray-50 rounded border text-sm text-gray-600';
-      // 默认折叠状态，用于历史记录
-      const summary = document.createElement('summary');
-      summary.className = 'cursor-pointer font-medium text-gray-500 hover:text-gray-700 select-none';
-      summary.textContent = '思考过程';
-      const contentDiv = document.createElement('div');
-      contentDiv.className = 'mt-2 prose prose-sm max-w-none';
-      contentDiv.innerHTML = marked.parse(m.reasoningContent);
+      dropdown.classList.add("hidden");
+      trigger.classList.remove("opacity-100");
       
-      details.appendChild(summary);
-      details.appendChild(contentDiv);
-      contentWrapper.appendChild(details);
-  }
+      this.renamingId = conv.id;
+      UI.modalTitle.innerText = "Rename Chat";
+      UI.modalInput.value = conv.name;
+      
+      UI.toggleVisibility(UI.modalBackdrop, true);
+      // Small delay for transition
+      requestAnimationFrame(() => {
+        UI.modalBackdrop.classList.remove("opacity-0");
+        UI.modalBackdrop.classList.add("opacity-100");
+      });
+      
+      setTimeout(() => UI.modalInput.focus(), 100);
+    };
 
-  const content = document.createElement('div');
-  content.className = 'content prose prose-sm max-w-none'; // Added class for styling consistency
-  content.innerHTML = marked.parse(m.content || '');
-  
-  contentWrapper.appendChild(content);
-  
-  div.appendChild(meta);
-  div.appendChild(contentWrapper);
-  ui.chat.appendChild(div);
-  ui.chat.scrollTop = ui.chat.scrollHeight;
-}
+    deleteBtn.onclick = async (e) => {
+      e.stopPropagation();
+      dropdown.classList.add("hidden");
+      if (confirm("Delete this conversation?")) {
+        await API.del(`/conversations/${conv.id}`);
+        if (Store.currentConversationId == conv.id) {
+          this.startNewChat();
+        } else {
+          this.loadConversations();
+        }
+      }
+    };
 
-// 处理发送消息
-async function handleSend() {
-  const content = ui.input.value.trim();
-  if (!content) return;
+    return item;
+  },
 
-  setLoadingState(true);
+  startNewChat() {
+    Store.currentConversationId = null;
+    this.clearChat();
+    this.loadConversations(); // Refresh highlight
+    UI.chatInput.focus();
+  },
 
-  ui.sendState.textContent = '发送中...';
-  const activeConv = document.querySelector('#convList li.active');
-  const convId = activeConv?.dataset?.id ? Number(activeConv.dataset.id) : null;
-  if (!convId) {
-    ui.sendState.textContent = '请选择会话';
-    setLoadingState(false);
-    return;
-  }
-  
-  try {
-    await api.post('/messages', {
-        conversationId: convId,
-        content,
-        type: 'user',
-    });
-    
-    renderMessage({ type: 'user', content, createAt: new Date().toISOString() });
-    ui.input.value = '';
-    ui.sendState.textContent = '';
-    
-    createAssistantContainer();
-    assistantBuffer = '';
-    startStream({ conversationId: convId, message: content });
-  } catch (e) {
-    ui.sendState.textContent = '发送失败: ' + e.message;
-    setLoadingState(false);
-  }
-}
+  clearChat() {
+    UI.chatContainer.innerHTML = "";
+    UI.toggleVisibility(UI.emptyState, true);
+    Store.currentConversationId = null;
+    // Reset active state in list
+    Array.from(UI.convList.children).forEach((child) =>
+      child.classList.remove("bg-gray-200")
+    );
+  },
 
-/**
- * 创建助手消息容器
- */
-function createAssistantContainer() {
-  const div = document.createElement('div');
-  div.className = 'message assistant';
-  const meta = document.createElement('div');
-  meta.className = 'meta';
-  meta.textContent = `answer · ${new Date().toLocaleString()}`;
-  const content = document.createElement('div');
-  content.className = 'content prose prose-sm max-w-none';
-  div.appendChild(meta);
-  div.appendChild(content);
-  ui.chat.appendChild(div);
-  currentAssistantContent = content;
-  ui.chat.scrollTop = ui.chat.scrollHeight;
-}
+  async openConversation(id) {
+    if (Store.currentConversationId === id) return;
+    Store.currentConversationId = id;
 
-// 启动事件流
-function startStream({ conversationId, message }) {
-  if (es) es.close();
-  ui.status.textContent = '生成中…';
+    // Highlight in list
+    this.loadConversations();
 
-  const params = new URLSearchParams();
-  if (message) params.append('prompt', message);
-  
-  const token = api.getToken();
-  if (token) params.append('token', token);
+    UI.toggleVisibility(UI.emptyState, false);
+    UI.chatContainer.innerHTML =
+      '<div class="flex justify-center p-4"><span class="loading-dot"></span></div>';
 
-  const url = `${api.base}/ai/stream/${conversationId}?${params.toString()}`;
-  
-  // 开启思考过程详情（如果勾选）
-  if (ui.thinkingToggle && ui.thinkingToggle.checked) {
-      params.append('thinking', 'enabled');
-  } else {
-      params.append('thinking', 'disabled');
-  }
-  
-  // 构建最终的URL
-  const finalUrl = `${api.base}/ai/stream/${conversationId}?${params.toString()}`;
-  es = new EventSource(finalUrl);
-
-  let reasoningBuffer = '';
-  let currentReasoningContent = null;
-
-  // 处理事件流数据
-  es.onmessage = (e) => {
     try {
-      const data = JSON.parse(e.data);
-      if (data.type === 'heartbeat') return;
+      const res = await API.get(`/messages/conversation/${id}`);
+      UI.chatContainer.innerHTML = "";
 
-      if (data.type === 'token' || data.type === 'message') {
-        if (!currentAssistantContent) createAssistantContainer();
-        
-        // 当正式回答开始，折叠推理过程
-        if (currentReasoningContent && currentReasoningContent.parentElement.open) {
-            currentReasoningContent.parentElement.open = false;
-        }
-        
-        assistantBuffer += data.content || '';
-        currentAssistantContent.innerHTML = marked.parse(assistantBuffer);
-        ui.chat.scrollTop = ui.chat.scrollHeight;
+      const messages = res.items || [];
+      if (messages.length === 0) {
+        UI.toggleVisibility(UI.emptyState, true);
+      } else {
+        messages.forEach((msg) => this.appendMessage(msg));
+        this.scrollToBottom();
       }
-
-      if (data.type === 'reasoning') {
-        if (!currentAssistantContent) createAssistantContainer();
-        
-        // 创建推理容器
-        if (!currentReasoningContent) {
-            const details = document.createElement('details');
-            details.className = 'mb-2 p-2 bg-gray-50 rounded border text-sm text-gray-600';
-            details.open = true; // Default open to show thinking
-            const summary = document.createElement('summary');
-            summary.className = 'cursor-pointer font-medium text-gray-500 hover:text-gray-700 select-none';
-            summary.textContent = '思考过程';
-            const contentDiv = document.createElement('div');
-            contentDiv.className = 'mt-2 prose prose-sm max-w-none';
-            
-            details.appendChild(summary);
-            details.appendChild(contentDiv);
-            
-            // 插入思考过程详情到消息容器中
-            currentAssistantContent.parentElement.insertBefore(details, currentAssistantContent);
-            // 初始化思考过程内容容器
-            currentReasoningContent = contentDiv;
-        }
-        
-        reasoningBuffer += data.content || '';
-        currentReasoningContent.innerHTML = marked.parse(reasoningBuffer);
-        ui.chat.scrollTop = ui.chat.scrollHeight;
-      }
-
-      if (data.type === 'error') {
-        ui.status.textContent = `生成失败：${data.message || '连接异常'}`;
-        currentAssistantContent = null;
-        assistantBuffer = '';
-        es.close();
-        setLoadingState(false);
-        return;
-      }
-
-      if (data.type === 'finish') {
-        ui.status.textContent = '对话完成';
-        if (currentAssistantContent) {
-          currentAssistantContent.innerHTML = marked.parse(assistantBuffer || '');
-        }
-        currentAssistantContent = null;
-        assistantBuffer = '';
-        currentReasoningContent = null;
-        reasoningBuffer = '';
-        es.close();
-        setLoadingState(false);
-      }
-    } catch (error) {
-      console.error('SSE Parse Error', error);
+    } catch (e) {
+      UI.chatContainer.innerHTML = `<div class="text-red-500 text-center p-4">Failed to load messages: ${e.message}</div>`;
     }
-  };
+  },
 
-  es.onerror = () => {
-    if (ui.status.textContent.startsWith('生成失败')) return;
-    ui.status.textContent = '连接异常';
-    currentAssistantContent = null;
-    assistantBuffer = '';
-    es.close();
-    setLoadingState(false);
-  };
-}
+  async sendMessage() {
+    const content = UI.chatInput.value.trim();
+    if (!content || Store.isGenerating) return;
 
-// 设置加载状态（禁用输入和发送按钮）
-function setLoadingState(loading) {
-  ui.input.disabled = loading;
-  ui.send.disabled = loading;
-  if (loading) {
-    ui.send.classList.add('opacity-50', 'cursor-not-allowed');
-  } else {
-    ui.send.classList.remove('opacity-50', 'cursor-not-allowed');
-    ui.input.focus();
-  }
-}
+    UI.chatInput.value = "";
+    UI.chatInput.style.height = "auto";
+    UI.sendBtn.disabled = true;
+    UI.sendBtn.classList.add("opacity-30");
+    UI.toggleVisibility(UI.emptyState, false);
+
+    // Optimistic UI for User Message
+    this.appendMessage({ type: "user", content, createdAt: new Date() });
+    this.scrollToBottom();
+
+    Store.isGenerating = true;
+    UI.setLoading(true);
+
+    try {
+      // 1. Ensure Conversation
+      if (!Store.currentConversationId) {
+        const name = content.slice(0, 30) || "New Chat";
+        const conv = await API.post("/conversations", { name });
+        Store.currentConversationId = conv.id;
+        this.loadConversations();
+      }
+
+      // 2. Send Message
+      await API.post("/messages", {
+        conversationId: Store.currentConversationId,
+        content,
+        type: "user",
+      });
+
+      // 3. Start SSE
+      this.startSSE(Store.currentConversationId, content);
+    } catch (e) {
+      UI.showToast(e.message, "error");
+      Store.isGenerating = false;
+      UI.sendBtn.disabled = false;
+      UI.sendBtn.classList.remove("opacity-30");
+      UI.setLoading(false);
+    }
+  },
+
+  appendMessage(msg) {
+    const isUser = msg.type === "user";
+    const div = document.createElement("div");
+    div.className = `flex w-full ${
+      isUser ? "justify-end" : "justify-start"
+    } animate-fade-in`;
+
+    const bubble = document.createElement("div");
+    bubble.className = isUser ? "message-user" : "message-assistant";
+
+    let htmlContent = "";
+
+    // Reasoning
+    if (msg.reasoningContent) {
+      htmlContent += this.buildReasoningHTML(msg.reasoningContent);
+    }
+
+    htmlContent += `<div class="prose prose-sm max-w-none ${
+      isUser ? "prose-invert" : ""
+    }">${marked.parse(msg.content || "")}</div>`;
+
+    bubble.innerHTML = htmlContent;
+    div.appendChild(bubble);
+    UI.chatContainer.appendChild(div);
+  },
+
+  buildReasoningHTML(content) {
+    return `
+            <details class="mb-3 group">
+                <summary class="cursor-pointer list-none text-xs font-medium text-gray-500 flex items-center gap-1 select-none hover:text-gray-800 transition-colors">
+                    <svg class="w-3 h-3 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                    Thinking Process
+                </summary>
+                <div class="mt-2 pl-4 border-l-2 border-gray-100 text-gray-500 text-sm prose prose-sm max-w-none">
+                    ${marked.parse(content)}
+                </div>
+            </details>
+        `;
+  },
+
+  startSSE(conversationId, prompt) {
+    if (Store.eventSource) Store.eventSource.close();
+
+    const params = new URLSearchParams();
+    if (prompt) params.append("prompt", prompt);
+    if (Store.token) params.append("token", Store.token);
+    params.append(
+      "thinking",
+      UI.thinkingToggle.checked ? "enabled" : "disabled"
+    );
+
+    const url = `${API_BASE}/ai/stream/${conversationId}?${params.toString()}`;
+    Store.eventSource = new EventSource(url);
+
+    // Create a placeholder for assistant response
+    const div = document.createElement("div");
+    div.className = "flex w-full justify-start animate-fade-in";
+    div.innerHTML = `
+            <div class="message-assistant">
+                <div class="assistant-content prose prose-sm max-w-none"></div>
+            </div>
+        `;
+    UI.chatContainer.appendChild(div);
+    const contentContainer = div.querySelector(".assistant-content");
+
+    let fullContent = "";
+    let fullReasoning = "";
+    let reasoningContainer = null;
+
+    Store.eventSource.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.type === "heartbeat") return;
+
+        if (data.type === "reasoning") {
+          if (!reasoningContainer) {
+            const details = document.createElement("details");
+            details.open = true;
+            details.className = "mb-3 group";
+            details.innerHTML = `
+                            <summary class="cursor-pointer list-none text-xs font-medium text-gray-500 flex items-center gap-1 select-none hover:text-gray-800 transition-colors">
+                                <svg class="w-3 h-3 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                                Thinking Process
+                            </summary>
+                            <div class="reasoning-body mt-2 pl-4 border-l-2 border-gray-100 text-gray-500 text-sm prose prose-sm max-w-none"></div>
+                        `;
+            contentContainer.parentElement.insertBefore(
+              details,
+              contentContainer
+            );
+            reasoningContainer = details.querySelector(".reasoning-body");
+          }
+          fullReasoning += data.content;
+          reasoningContainer.innerHTML = marked.parse(fullReasoning);
+          this.scrollToBottom();
+        }
+
+        if (data.type === "token" || data.type === "message") {
+          // If we switch from reasoning to content, close reasoning details
+          if (reasoningContainer && reasoningContainer.parentElement.open) {
+            reasoningContainer.parentElement.open = false;
+          }
+
+          fullContent += data.content;
+          contentContainer.innerHTML = marked.parse(fullContent);
+          this.scrollToBottom();
+        }
+
+        if (data.type === "finish" || data.type === "error") {
+          this.endSSE();
+          if (data.type === "error") {
+            UI.showToast(data.message || "Generation failed", "error");
+          }
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    Store.eventSource.onerror = () => {
+      this.endSSE();
+    };
+  },
+
+  endSSE() {
+    if (Store.eventSource) {
+      Store.eventSource.close();
+      Store.eventSource = null;
+    }
+    Store.isGenerating = false;
+    UI.setLoading(false);
+    UI.sendBtn.disabled = false;
+    UI.sendBtn.classList.remove("opacity-30");
+  },
+
+  scrollToBottom() {
+    UI.chatContainer.scrollTop = UI.chatContainer.scrollHeight;
+  },
+};

@@ -1,55 +1,43 @@
-export const api = {
-  base: '/api/v1',
-  token: null,
-  setToken(t) {
-    this.token = t;
-    if (t) {
-      localStorage.setItem('token', t);
-    } else {
-      localStorage.removeItem('token');
-    }
-  },
-  getToken() {
-    return this.token ?? localStorage.getItem('token');
-  },
+import { API_BASE } from "./config.js";
+import { Store } from "./store.js";
+
+export const API = {
   headers() {
-    const h = { 'Content-Type': 'application/json' };
-    const t = this.getToken();
-    if (t) h['Authorization'] = `Bearer ${t}`;
+    const h = { "Content-Type": "application/json" };
+    if (Store.token) h["Authorization"] = `Bearer ${Store.token}`;
     return h;
   },
-  async get(path) {
-    const res = await fetch(this.base + path, { headers: this.headers() });
-    return handle(res);
-  },
-  async post(path, body) {
-    const res = await fetch(this.base + path, {
-      method: 'POST',
-      headers: this.headers(),
-      body: JSON.stringify(body),
-    });
-    return handle(res);
-  },
-  async patch(path, body) {
-    const res = await fetch(this.base + path, {
-      method: 'PATCH',
-      headers: this.headers(),
-      body: JSON.stringify(body),
-    });
-    return handle(res);
-  },
-  async del(path) {
-    const res = await fetch(this.base + path, {
-      method: 'DELETE',
-      headers: this.headers(),
-    });
-    return handle(res);
-  },
-};
 
-async function handle(res) {
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || data.success === false)
-    throw new Error(data.message?.message ?? data.message ?? res.statusText);
-  return data.data ?? data;
-}
+  async request(method, path, body = null) {
+    const opts = { method, headers: this.headers() };
+    if (body) opts.body = JSON.stringify(body);
+
+    try {
+      const res = await fetch(API_BASE + path, opts);
+
+      if (res.status === 401) {
+        // Dispatch event for Auth module to handle
+        window.dispatchEvent(new CustomEvent("auth:unauthorized"));
+        throw new Error("Unauthorized");
+      }
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(
+          data.message?.message || data.message || res.statusText
+        );
+      }
+
+      return data.data ?? data;
+    } catch (err) {
+      console.error("API Error:", err);
+      throw err;
+    }
+  },
+
+  get: (path) => API.request("GET", path),
+  post: (path, body) => API.request("POST", path, body),
+  put: (path, body) => API.request("PUT", path, body),
+  del: (path) => API.request("DELETE", path),
+};

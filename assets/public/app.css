@@ -1,6 +1,0 @@
-/* minimal custom styles */
-.message { padding: 0.75rem; border-radius: 0.5rem; }
-.message.user { background: #e0f2fe; }
-.message.assistant { background: #f1f5f9; }
-.message .meta { font-size: 0.75rem; color: #6b7280; margin-bottom: 0.25rem; }
-/* .message .content { white-space: pre-wrap; } Removed to support prose/markdown */

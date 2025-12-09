@@ -6,6 +6,7 @@ import (
 	"ai-chat/internal/middleware"
 	"io/fs"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -158,6 +159,32 @@ func (r *Router) setupRoutes() {
 		c.JSON(200, gin.H{
 			"status": "ok",
 		})
+	})
+	
+	// 统一 404 处理
+	r.engine.NoRoute(func(c *gin.Context) {
+		// API 路径返回 JSON 格式错误
+		if strings.HasPrefix(c.Request.URL.Path, "/api") {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "Not Found",
+			})
+			return
+		}
+
+		// 其他路径尝试返回前端入口文件（支持 SPA History 模式）
+		// 如果是静态资源路径，则直接返回 404
+		if strings.HasPrefix(c.Request.URL.Path, "/static") {
+			c.String(http.StatusNotFound, "404 page not found")
+			return
+		}
+
+		// 返回 index.html
+		content, err := assets.PublicFS.ReadFile("public/index.html")
+		if err != nil {
+			c.String(http.StatusNotFound, "404 page not found")
+			return
+		}
+		c.Data(http.StatusOK, "text/html; charset=utf-8", content)
 	})
 }
 
