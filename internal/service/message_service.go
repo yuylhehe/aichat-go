@@ -1,6 +1,7 @@
 package service
 
 import (
+	"ai-chat/internal/model"
 	"ai-chat/internal/repository"
 	"fmt"
 	"time"
@@ -53,8 +54,8 @@ type MessageResponse struct {
 func (s *MessageService) Create(userID uint, req *CreateMessageRequest) (*MessageResponse, error) {
 	// 验证会话归属权
 	var count int64
-	if err := s.db.Model(&repository.Conversation{}).
-		Where(&repository.Conversation{ID: req.ConversationID, UserID: userID}).
+	if err := s.db.Model(&model.Conversation{}).
+		Where(&model.Conversation{ID: req.ConversationID, UserID: userID}).
 		Count(&count).Error; err != nil {
 		return nil, fmt.Errorf("验证会话归属权失败: %w", err)
 	}
@@ -101,7 +102,7 @@ func (s *MessageService) NextSort(conversationID uint) (int, error) {
 func (s *MessageService) FindByConversationID(userID, conversationID uint) ([]*MessageResponse, error) {
 	// 验证会话归属权
 	var count int64
-	if err := s.db.Model(&repository.Conversation{}).Where(&repository.Conversation{ID: conversationID, UserID: userID}).Count(&count).Error; err != nil {
+	if err := s.db.Model(&model.Conversation{}).Where(&model.Conversation{ID: conversationID, UserID: userID}).Count(&count).Error; err != nil {
 		return nil, fmt.Errorf("验证会话归属权失败: %w", err)
 	}
 	if count == 0 {

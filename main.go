@@ -28,10 +28,14 @@ func main() {
 		log.Fatal("Failed to migrate database:", err)
 	}
 
+	// 初始化 Repository 层
+	conversationRepo := repository.NewConversationRepository(db)
+	userRepo := repository.NewUserRepository(db)
+
 	// 初始化服务层
-	userService := service.NewUserService(db)
+	userService := service.NewUserService(userRepo)
 	authService := service.NewAuthService(db, cfg)
-	conversationService := service.NewConversationService(db)
+	conversationService := service.NewConversationService(conversationRepo, db)
 	messageService := service.NewMessageService(db)
 	fixedPromptService := service.NewFixedPromptService(db)
 	aiService := service.NewAIService(db, cfg)

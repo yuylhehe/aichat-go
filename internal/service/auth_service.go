@@ -2,10 +2,8 @@ package service
 
 import (
 	"ai-chat/config"
-	"ai-chat/internal/repository"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
+	"ai-chat/internal/model"
+	"ai-chat/internal/pkg/crypto"
 	"errors"
 	"fmt"
 	"time"
@@ -54,30 +52,12 @@ type TokenResponse struct {
 
 // AuthResponse 认证响应
 type AuthResponse struct {
-	User  *repository.User `json:"user"`
-	Token *TokenResponse   `json:"token"`
-}
-
-// HashPassword 密码哈希
-func HashPassword(password string, salt string) string {
-	hash := sha256.Sum256([]byte(password + salt))
-	return hex.EncodeToString(hash[:])
-}
-
-// GenerateSalt 生成盐值
-func GenerateSalt() string {
-	b := make([]byte, 32)
-	rand.Read(b)
-	return hex.EncodeToString(b)
-}
-
-// VerifyPassword 验证密码
-func VerifyPassword(password, salt, hashedPassword string) bool {
-	return HashPassword(password, salt) == hashedPassword
+	User  *model.User    `json:"user"`
+	Token *TokenResponse `json:"token"`
 }
 
 // GenerateJWT 生成JWT令牌
-func (s *AuthService) GenerateJWT(user *repository.User) (*TokenResponse, error) {
+func (s *AuthService) GenerateJWT(user *model.User) (*TokenResponse, error) {
 	expireTime := time.Now().Add(24 * time.Hour) // 24小时过期
 
 	claims := jwt.MapClaims{
@@ -114,16 +94,16 @@ func (s *AuthService) GenerateJWT(user *repository.User) (*TokenResponse, error)
 // Register 用户注册
 func (s *AuthService) Register(req *RegisterRequest) (*AuthResponse, error) {
 	// 检查邮箱是否已存在
-	var existingUser repository.User
+	var existingUser model.User
 	if err := s.db.Where("email = ?", req.Email).First(&existingUser).Error; err == nil {
 		return nil, errors.New("邮箱已被注册")
 	}
 
 	// 创建新用户
-	salt := GenerateSalt()
-	hashedPassword := HashPassword(req.Password, salt)
+	salt := crypto.GenerateSalt()
+	hashedPassword := crypto.HashPassword(req.Password, salt)
 
-	user := &repository.User{
+	user := &model.User{
 		Name:     req.Name,
 		Email:    req.Email,
 		Password: hashedPassword,
@@ -149,7 +129,7 @@ func (s *AuthService) Register(req *RegisterRequest) (*AuthResponse, error) {
 // Login 用户登录
 func (s *AuthService) Login(req *LoginRequest) (*AuthResponse, error) {
 	// 查找用户
-	var user repository.User
+	var user model.User
 	if err := s.db.Where("email = ?", req.Email).First(&user).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.New("邮箱或密码错误")
@@ -158,7 +138,7 @@ func (s *AuthService) Login(req *LoginRequest) (*AuthResponse, error) {
 	}
 
 	// 验证密码
-	if !VerifyPassword(req.Password, user.Salt, user.Password) {
+	if !crypto.VerifyPassword(req.Password, user.Salt, user.Password) {
 		return nil, errors.New("邮箱或密码错误")
 	}
 
@@ -196,7 +176,7 @@ func (s *AuthService) ParseJWT(tokenString string) (*jwt.MapClaims, error) {
 }
 
 // GetUserFromToken 从令牌中获取用户信息
-func (s *AuthService) GetUserFromToken(tokenString string) (*repository.User, error) {
+func (s *AuthService) GetUserFromToken(tokenString string) (*model.User, error) {
 	claims, err := s.ParseJWT(tokenString)
 	if err != nil {
 		return nil, err
@@ -207,7 +187,7 @@ func (s *AuthService) GetUserFromToken(tokenString string) (*repository.User, er
 		return nil, errors.New("令牌中缺少用户ID")
 	}
 
-	var user repository.User
+	var user model.User
 	if err := s.db.First(&user, uint(userID)).Error; err != nil {
 		return nil, fmt.Errorf("查找用户失败: %w", err)
 	}
@@ -229,7 +209,7 @@ func (s *AuthService) RefreshToken(refreshToken string) (*TokenResponse, error) 
 	}
 
 	// 查找用户
-	var user repository.User
+	var user model.User
 	if err := s.db.First(&user, uint(userID)).Error; err != nil {
 		return nil, fmt.Errorf("查找用户失败: %w", err)
 	}
@@ -239,8 +219,8 @@ func (s *AuthService) RefreshToken(refreshToken string) (*TokenResponse, error) 
 }
 
 // GetUserByID 根据ID获取用户信息
-func (s *AuthService) GetUserByID(userID uint) (*repository.User, error) {
-	var user repository.User
+func (s *AuthService) GetUserByID(userID uint) (*model.User, error) {
+	var user model.User
 	if err := s.db.First(&user, userID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.New("用户不存在")

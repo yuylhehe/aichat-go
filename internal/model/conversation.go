@@ -22,8 +22,11 @@ type Conversation struct {
 	// 关联关系
 	User     User      `json:"user,omitempty" gorm:"foreignKey:UserID"`
 	Messages []Message `json:"messages,omitempty" gorm:"foreignKey:ConversationID"`
+}
 
-	TableName string `json:"-" gorm:"tableName:conversation"`
+// TableName 指定表名
+func (Conversation) TableName() string {
+	return "conversation"
 }
 
 // BeforeCreate 创建前钩子

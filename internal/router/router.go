@@ -143,14 +143,6 @@ func (r *Router) setupRoutes() {
 			users.GET("/profile", r.userHandler.GetProfile)
 			users.PUT("/profile", r.userHandler.UpdateProfile)
 			// users.PUT("/password", r.userHandler.UpdatePassword)
-			users.DELETE("/account", r.userHandler.DeleteAccount)
-
-			// 管理员路由，暂时不提供
-			// admin := users.Group("/admin")
-			// {
-			// admin.GET("", r.userHandler.GetUserList)
-			// admin.GET("/:id", r.userHandler.GetUserByID)
-			// }
 		}
 	}
 
@@ -160,7 +152,7 @@ func (r *Router) setupRoutes() {
 			"status": "ok",
 		})
 	})
-	
+
 	// 统一 404 处理
 	r.engine.NoRoute(func(c *gin.Context) {
 		// API 路径返回 JSON 格式错误
