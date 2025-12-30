@@ -5,18 +5,20 @@ import (
 	"ai-chat/internal/repository"
 	"fmt"
 	"time"
-
-	"gorm.io/gorm"
 )
 
 // MessageService 消息服务
 type MessageService struct {
-	db *gorm.DB
+	repo            repository.MessageRepository
+	conversationRepo repository.ConversationRepository
 }
 
 // NewMessageService 创建消息服务
-func NewMessageService(db *gorm.DB) *MessageService {
-	return &MessageService{db: db}
+func NewMessageService(repo repository.MessageRepository, conversationRepo repository.ConversationRepository) *MessageService {
+	return &MessageService{
+		repo:            repo,
+		conversationRepo: conversationRepo,
+	}
 }
 
 // CreateMessageRequest 创建消息请求
@@ -53,10 +55,8 @@ type MessageResponse struct {
 // Create 创建消息
 func (s *MessageService) Create(userID uint, req *CreateMessageRequest) (*MessageResponse, error) {
 	// 验证会话归属权
-	var count int64
-	if err := s.db.Model(&model.Conversation{}).
-		Where(&model.Conversation{ID: req.ConversationID, UserID: userID}).
-		Count(&count).Error; err != nil {
+	count, err := s.conversationRepo.CountByIDAndUserID(req.ConversationID, userID)
+	if err != nil {
 		return nil, fmt.Errorf("验证会话归属权失败: %w", err)
 	}
 	if count == 0 {
@@ -64,12 +64,12 @@ func (s *MessageService) Create(userID uint, req *CreateMessageRequest) (*Messag
 	}
 
 	// 获取下一个排序值
-	nextSort, err := s.NextSort(req.ConversationID)
+	nextSort, err := s.repo.NextSort(req.ConversationID)
 	if err != nil {
 		return nil, fmt.Errorf("获取消息排序失败: %w", err)
 	}
 
-	message := &repository.Message{
+	message := &model.Message{
 		ConversationID:   req.ConversationID,
 		Content:          req.Content,
 		ReasoningContent: req.ReasoningContent,
@@ -79,8 +79,8 @@ func (s *MessageService) Create(userID uint, req *CreateMessageRequest) (*Messag
 		ParentID:         req.ParentID,
 	}
 
-	if err := s.db.Create(message).Error; err != nil {
-		return nil, fmt.Errorf("创建消息失败: %w", err)
+	if err := s.repo.Create(message); err != nil {
+		return nil, err
 	}
 
 	return s.toResponse(message), nil
@@ -88,34 +88,23 @@ func (s *MessageService) Create(userID uint, req *CreateMessageRequest) (*Messag
 
 // NextSort 获取下一个消息排序值
 func (s *MessageService) NextSort(conversationID uint) (int, error) {
-	var maxSort int
-	err := s.db.Model(&repository.Message{}).
-		Where("conversation_id = ?", conversationID).
-		Pluck("COALESCE(MAX(sort), 0)", &maxSort).Error
-	if err != nil {
-		return 0, fmt.Errorf("查询最大排序值失败: %w", err)
-	}
-	return maxSort + 1, nil
+	return s.repo.NextSort(conversationID)
 }
 
 // FindByConversationID 根据会话ID查找消息
 func (s *MessageService) FindByConversationID(userID, conversationID uint) ([]*MessageResponse, error) {
 	// 验证会话归属权
-	var count int64
-	if err := s.db.Model(&model.Conversation{}).Where(&model.Conversation{ID: conversationID, UserID: userID}).Count(&count).Error; err != nil {
+	count, err := s.conversationRepo.CountByIDAndUserID(conversationID, userID)
+	if err != nil {
 		return nil, fmt.Errorf("验证会话归属权失败: %w", err)
 	}
 	if count == 0 {
 		return nil, fmt.Errorf("无权查看该会话消息")
 	}
 
-	var messages []*repository.Message
-
-	query := s.db.Model(&repository.Message{}).Where("conversation_id = ?", conversationID)
-
-	// 查询列表
-	if err := query.Order("sort asc").Find(&messages).Error; err != nil {
-		return nil, fmt.Errorf("查询消息列表失败: %w", err)
+	messages, err := s.repo.FindByConversationID(conversationID)
+	if err != nil {
+		return nil, err
 	}
 
 	items := make([]*MessageResponse, len(messages))
@@ -128,16 +117,9 @@ func (s *MessageService) FindByConversationID(userID, conversationID uint) ([]*M
 
 // FindAll 获取用户的消息列表
 func (s *MessageService) FindAll(userID uint) ([]*MessageResponse, error) {
-	var messages []*repository.Message
-
-	// 使用 Join 查询属于该用户的消息
-	query := s.db.Model(&repository.Message{}).
-		Joins("JOIN conversation ON conversation.id = message.conversation_id").
-		Where("conversation.user_id = ?", userID)
-
-	// 查询列表
-	if err := query.Order("message.sort asc").Find(&messages).Error; err != nil {
-		return nil, fmt.Errorf("查询消息列表失败: %w", err)
+	messages, err := s.repo.FindByUserID(userID)
+	if err != nil {
+		return nil, err
 	}
 
 	items := make([]*MessageResponse, len(messages))
@@ -150,33 +132,19 @@ func (s *MessageService) FindAll(userID uint) ([]*MessageResponse, error) {
 
 // FindByID 根据ID查找消息
 func (s *MessageService) FindByID(userID, id uint) (*MessageResponse, error) {
-	var message repository.Message
-
-	// 使用 Join 验证归属权
-	err := s.db.Model(&repository.Message{}).
-		Joins("JOIN conversation ON conversation.id = message.conversation_id").
-		Where("message.id = ? AND conversation.user_id = ?", id, userID).
-		First(&message).Error
-
+	message, err := s.repo.FindByIDAndUserID(id, userID)
 	if err != nil {
-		return nil, fmt.Errorf("查找消息失败: %w", err)
+		return nil, err
 	}
 
-	return s.toResponse(&message), nil
+	return s.toResponse(message), nil
 }
 
 // Update 更新消息
 func (s *MessageService) Update(userID, id uint, req *UpdateMessageRequest) (*MessageResponse, error) {
-	var message repository.Message
-
-	// 验证归属权并获取消息
-	err := s.db.Model(&repository.Message{}).
-		Joins("JOIN conversation ON conversation.id = message.conversation_id").
-		Where("message.id = ? AND conversation.user_id = ?", id, userID).
-		First(&message).Error
-
+	message, err := s.repo.FindByIDAndUserID(id, userID)
 	if err != nil {
-		return nil, fmt.Errorf("查找消息失败: %w", err)
+		return nil, err
 	}
 
 	// 更新字段
@@ -189,53 +157,37 @@ func (s *MessageService) Update(userID, id uint, req *UpdateMessageRequest) (*Me
 	}
 
 	if len(updates) == 0 {
-		return s.toResponse(&message), nil
+		return s.toResponse(message), nil
 	}
 
-	if err := s.db.Model(&message).Updates(updates).Error; err != nil {
-		return nil, fmt.Errorf("更新消息失败: %w", err)
+	if err := s.repo.Update(message, updates); err != nil {
+		return nil, err
 	}
 
 	// 重新获取更新后的数据
-	s.db.First(&message, id)
+	message, _ = s.repo.FindByID(id)
 
-	return s.toResponse(&message), nil
+	return s.toResponse(message), nil
 }
 
 // Delete 删除消息
 func (s *MessageService) Delete(userID, id uint) error {
 	// 验证归属权
-	var count int64
-	err := s.db.Model(&repository.Message{}).
-		Joins("JOIN conversation ON conversation.id = message.conversation_id").
-		Where("message.id = ? AND conversation.user_id = ?", id, userID).
-		Count(&count).Error
-
+	_, err := s.repo.FindByIDAndUserID(id, userID)
 	if err != nil {
-		return fmt.Errorf("验证消息归属权失败: %w", err)
-	}
-	if count == 0 {
 		return fmt.Errorf("消息不存在或无权删除")
 	}
 
-	if err := s.db.Delete(&repository.Message{}, id).Error; err != nil {
-		return fmt.Errorf("删除消息失败: %w", err)
-	}
-
-	return nil
+	return s.repo.Delete(id)
 }
 
 // DeleteByConversationID 根据会话ID删除消息
 func (s *MessageService) DeleteByConversationID(conversationID uint) error {
-	if err := s.db.Where("conversation_id = ?", conversationID).Delete(&repository.Message{}).Error; err != nil {
-		return fmt.Errorf("删除会话消息失败: %w", err)
-	}
-
-	return nil
+	return s.repo.DeleteByConversationID(conversationID)
 }
 
 // toResponse 转换为响应结构
-func (s *MessageService) toResponse(msg *repository.Message) *MessageResponse {
+func (s *MessageService) toResponse(msg *model.Message) *MessageResponse {
 	return &MessageResponse{
 		ID:               msg.ID,
 		ConversationID:   msg.ConversationID,

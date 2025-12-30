@@ -4,28 +4,28 @@ import (
 	"ai-chat/config"
 	"ai-chat/internal/model"
 	"ai-chat/internal/pkg/crypto"
+	"ai-chat/internal/repository"
 	"errors"
 	"fmt"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"gorm.io/gorm"
 )
 
 // AuthService 认证服务
 type AuthService struct {
-	db  *gorm.DB
-	cfg *config.Config
+	userRepo repository.UserRepository
+	cfg      *config.Config
 }
 
 // NewAuthService 创建认证服务
-func NewAuthService(db *gorm.DB, cfg *config.Config) *AuthService {
+func NewAuthService(userRepo repository.UserRepository, cfg *config.Config) *AuthService {
 	if cfg == nil {
 		panic("初始化 AuthService 失败: config 不能为 nil")
 	}
 	return &AuthService{
-		db:  db,
-		cfg: cfg,
+		userRepo: userRepo,
+		cfg:      cfg,
 	}
 }
 
@@ -94,8 +94,8 @@ func (s *AuthService) GenerateJWT(user *model.User) (*TokenResponse, error) {
 // Register 用户注册
 func (s *AuthService) Register(req *RegisterRequest) (*AuthResponse, error) {
 	// 检查邮箱是否已存在
-	var existingUser model.User
-	if err := s.db.Where("email = ?", req.Email).First(&existingUser).Error; err == nil {
+	_, err := s.userRepo.FindByEmail(req.Email)
+	if err == nil {
 		return nil, errors.New("邮箱已被注册")
 	}
 
@@ -110,7 +110,7 @@ func (s *AuthService) Register(req *RegisterRequest) (*AuthResponse, error) {
 		Salt:     salt,
 	}
 
-	if err := s.db.Create(user).Error; err != nil {
+	if err := s.userRepo.Create(user); err != nil {
 		return nil, fmt.Errorf("创建用户失败: %w", err)
 	}
 
@@ -129,12 +129,9 @@ func (s *AuthService) Register(req *RegisterRequest) (*AuthResponse, error) {
 // Login 用户登录
 func (s *AuthService) Login(req *LoginRequest) (*AuthResponse, error) {
 	// 查找用户
-	var user model.User
-	if err := s.db.Where("email = ?", req.Email).First(&user).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New("邮箱或密码错误")
-		}
-		return nil, fmt.Errorf("查找用户失败: %w", err)
+	user, err := s.userRepo.FindByEmail(req.Email)
+	if err != nil {
+		return nil, errors.New("邮箱或密码错误")
 	}
 
 	// 验证密码
@@ -143,13 +140,13 @@ func (s *AuthService) Login(req *LoginRequest) (*AuthResponse, error) {
 	}
 
 	// 生成令牌
-	token, err := s.GenerateJWT(&user)
+	token, err := s.GenerateJWT(user)
 	if err != nil {
 		return nil, fmt.Errorf("生成令牌失败: %w", err)
 	}
 
 	return &AuthResponse{
-		User:  &user,
+		User:  user,
 		Token: token,
 	}, nil
 }
@@ -182,17 +179,17 @@ func (s *AuthService) GetUserFromToken(tokenString string) (*model.User, error) 
 		return nil, err
 	}
 
-	userID, ok := (*claims)["userId"].(float64)
+	userIDFloat, ok := (*claims)["userId"].(float64)
 	if !ok {
 		return nil, errors.New("令牌中缺少用户ID")
 	}
 
-	var user model.User
-	if err := s.db.First(&user, uint(userID)).Error; err != nil {
+	user, err := s.userRepo.FindByID(uint(userIDFloat))
+	if err != nil {
 		return nil, fmt.Errorf("查找用户失败: %w", err)
 	}
 
-	return &user, nil
+	return user, nil
 }
 
 // RefreshToken 刷新令牌
@@ -203,30 +200,27 @@ func (s *AuthService) RefreshToken(refreshToken string) (*TokenResponse, error) 
 		return nil, errors.New("无效的刷新令牌")
 	}
 
-	userID, ok := (*claims)["userId"].(float64)
+	userIDFloat, ok := (*claims)["userId"].(float64)
 	if !ok {
 		return nil, errors.New("令牌中缺少用户ID")
 	}
 
 	// 查找用户
-	var user model.User
-	if err := s.db.First(&user, uint(userID)).Error; err != nil {
+	user, err := s.userRepo.FindByID(uint(userIDFloat))
+	if err != nil {
 		return nil, fmt.Errorf("查找用户失败: %w", err)
 	}
 
 	// 生成新的访问令牌
-	return s.GenerateJWT(&user)
+	return s.GenerateJWT(user)
 }
 
 // GetUserByID 根据ID获取用户信息
 func (s *AuthService) GetUserByID(userID uint) (*model.User, error) {
-	var user model.User
-	if err := s.db.First(&user, userID).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New("用户不存在")
-		}
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
 		return nil, fmt.Errorf("查找用户失败: %w", err)
 	}
 
-	return &user, nil
+	return user, nil
 }

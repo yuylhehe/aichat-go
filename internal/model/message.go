@@ -25,8 +25,11 @@ type Message struct {
 	Conversation Conversation `json:"conversation,omitempty" gorm:"foreignKey:ConversationID"`
 	Parent       *Message     `json:"parent,omitempty" gorm:"foreignKey:ParentID"`
 	Replies      []Message    `json:"replies,omitempty" gorm:"foreignKey:ParentID"`
+}
 
-	TableName string `json:"-" gorm:"tableName:message"`
+// TableName 指定表名
+func (Message) TableName() string {
+	return "message"
 }
 
 // BeforeCreate 创建前钩子

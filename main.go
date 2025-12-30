@@ -29,16 +29,18 @@ func main() {
 	}
 
 	// 初始化 Repository 层
-	conversationRepo := repository.NewConversationRepository(db)
 	userRepo := repository.NewUserRepository(db)
+	conversationRepo := repository.NewConversationRepository(db)
+	messageRepo := repository.NewMessageRepository(db)
+	fixedPromptRepo := repository.NewFixedPromptRepository(db)
 
 	// 初始化服务层
 	userService := service.NewUserService(userRepo)
-	authService := service.NewAuthService(db, cfg)
+	authService := service.NewAuthService(userRepo, cfg)
 	conversationService := service.NewConversationService(conversationRepo, db)
-	messageService := service.NewMessageService(db)
-	fixedPromptService := service.NewFixedPromptService(db)
-	aiService := service.NewAIService(db, cfg)
+	messageService := service.NewMessageService(messageRepo, conversationRepo)
+	fixedPromptService := service.NewFixedPromptService(fixedPromptRepo)
+	aiService := service.NewAIService(messageRepo, cfg)
 
 	// 初始化处理器
 	authHandler := handler.NewAuthHandler(authService)

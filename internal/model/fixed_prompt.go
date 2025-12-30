@@ -16,8 +16,11 @@ type FixedPrompt struct {
 	CreatedAt time.Time      `json:"createdAt" gorm:"autoCreateTime"`
 	UpdatedAt time.Time      `json:"updatedAt" gorm:"autoUpdateTime"`
 	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`
+}
 
-	TableName string `json:"-" gorm:"tableName:fixed_prompt"`
+// TableName 指定表名
+func (FixedPrompt) TableName() string {
+	return "fixed_prompt"
 }
 
 // BeforeCreate 创建前钩子

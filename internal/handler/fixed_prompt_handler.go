@@ -44,7 +44,7 @@ func (h *FixedPromptHandler) Create(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"code": 200,
+		"code": 0,
 		"data": response,
 	})
 }
@@ -71,7 +71,7 @@ func (h *FixedPromptHandler) GetList(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code": 200,
+		"code": 0,
 		"data": result,
 	})
 }
@@ -99,7 +99,7 @@ func (h *FixedPromptHandler) GetByID(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code": 200,
+		"code": 0,
 		"data": response,
 	})
 }
@@ -136,7 +136,7 @@ func (h *FixedPromptHandler) Update(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code": 200,
+		"code": 0,
 		"data": response,
 	})
 }
@@ -164,7 +164,7 @@ func (h *FixedPromptHandler) Delete(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code":    200,
+		"code":    0,
 		"message": "删除成功",
 	})
 }

@@ -59,8 +59,8 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "请求参数错误",
-			"details": err.Error(),
+			"code":  400,
+			"error": "请求参数错误",
 		})
 		return
 	}
@@ -73,13 +73,14 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	result, err := h.authService.Register(serviceReq)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "注册失败",
-			"details": err.Error(),
+			"code":  500,
+			"error": "注册失败: " + err.Error(),
 		})
 		return
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
+		"code": 0,
 		"data": AuthResponse{
 			User: UserResponse{
 				ID:        result.User.ID,
@@ -100,8 +101,8 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "请求参数错误",
-			"details": err.Error(),
+			"code":  400,
+			"error": "请求参数错误",
 		})
 		return
 	}
@@ -113,13 +114,14 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	result, err := h.authService.Login(serviceReq)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{
-			"error":   "登录失败",
-			"details": "邮箱或密码错误",
+			"code":  401,
+			"error": "邮箱或密码错误",
 		})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
+		"code": 0,
 		"data": AuthResponse{
 			User: UserResponse{
 				ID:        result.User.ID,
@@ -140,8 +142,8 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	var req RefreshTokenRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "请求参数错误",
-			"details": err.Error(),
+			"code":  400,
+			"error": "请求参数错误",
 		})
 		return
 	}
@@ -149,13 +151,14 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	result, err := h.authService.RefreshToken(req.RefreshToken)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{
-			"error":   "刷新令牌失败",
-			"details": err.Error(),
+			"code":  401,
+			"error": "刷新令牌失败: " + err.Error(),
 		})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
+		"code": 0,
 		"data": gin.H{
 			"accessToken":  result.AccessToken,
 			"refreshToken": result.RefreshToken,
@@ -171,12 +174,14 @@ func (h *AuthHandler) GetProfile(c *gin.Context) {
 	user, err := h.authService.GetUserByID(userID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{
+			"code":  404,
 			"error": "用户不存在",
 		})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
+		"code": 0,
 		"data": UserResponse{
 			ID:        user.ID,
 			Email:     user.Email,
@@ -190,6 +195,7 @@ func (h *AuthHandler) GetProfile(c *gin.Context) {
 // Logout 用户登出
 func (h *AuthHandler) Logout(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
+		"code":    0,
 		"message": "登出成功",
 	})
 }

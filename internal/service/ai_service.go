@@ -12,8 +12,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	"gorm.io/gorm"
 )
 
 // Message 消息结构体
@@ -54,16 +52,16 @@ type ChatResponse struct {
 
 // AIService AI服务
 type AIService struct {
-	db     *gorm.DB
-	cfg    *config.Config
+	repo repository.MessageRepository
+	cfg  *config.Config
 	client *http.Client
 }
 
 // NewAIService 创建AI服务
-func NewAIService(db *gorm.DB, cfg *config.Config) *AIService {
+func NewAIService(repo repository.MessageRepository, cfg *config.Config) *AIService {
 	return &AIService{
-		db:  db,
-		cfg: cfg,
+		repo: repo,
+		cfg:  cfg,
 		client: &http.Client{
 			Timeout: 300 * time.Second, // 5分钟超时
 			Transport: &http.Transport{
@@ -281,10 +279,7 @@ func (s *AIService) StreamChat(req *ChatRequest) (<-chan StreamResponse, <-chan 
 
 // GetConversationHistory 获取对话历史
 func (s *AIService) GetConversationHistory(conversationID uint) ([]Message, error) {
-	var messages []repository.Message
-	err := s.db.Where("conversation_id = ?", conversationID).
-		Order("sort asc").
-		Find(&messages).Error
+	messages, err := s.repo.FindByConversationID(conversationID)
 	if err != nil {
 		return nil, fmt.Errorf("获取对话历史失败: %w", err)
 	}

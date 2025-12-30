@@ -16,43 +16,6 @@ type MessageHandler struct {
 	messageService *service.MessageService
 }
 
-// convertToMessageResponse 将服务层MessageResponse转换为handler层MessageResponse
-func convertToMessageResponse(items []*service.MessageResponse) []*dto.MessageResponse {
-	result := make([]*dto.MessageResponse, len(items))
-	for i, item := range items {
-		result[i] = &dto.MessageResponse{
-			ID:               item.ID,
-			ConversationID:   item.ConversationID,
-			Content:          item.Content,
-			ReasoningContent: item.ReasoningContent,
-			Sort:             item.Sort,
-			Type:             item.Type,
-			Tokens:           item.Tokens,
-			Model:            item.Model,
-			ParentID:         item.ParentID,
-			Metadata:         item.Metadata,
-			CreatedAt:        item.CreatedAt.Format(common.TimeLayout),
-		}
-	}
-	return result
-}
-
-// convertSingleMessageResponse 将单个服务层MessageResponse转换为handler层MessageResponse
-func convertSingleMessageResponse(msg *service.MessageResponse) *dto.MessageResponse {
-	return &dto.MessageResponse{
-		ID:             msg.ID,
-		ConversationID: msg.ConversationID,
-		Content:        msg.Content,
-		Sort:           msg.Sort,
-		Type:           msg.Type,
-		Tokens:         msg.Tokens,
-		Model:          msg.Model,
-		ParentID:       msg.ParentID,
-		Metadata:       msg.Metadata,
-		CreatedAt:      msg.CreatedAt.Format(common.TimeLayout),
-	}
-}
-
 // NewMessageHandler 创建消息处理器
 func NewMessageHandler(messageService *service.MessageService) *MessageHandler {
 	return &MessageHandler{
@@ -88,15 +51,7 @@ func (h *MessageHandler) Create(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"data": dto.MessageResponse{
-			ID:             message.ID,
-			ConversationID: message.ConversationID,
-			Content:        message.Content,
-			Type:           message.Type,
-			Tokens:         message.Tokens,
-			Model:          message.Model,
-			CreatedAt:      message.CreatedAt.Format(common.TimeLayout),
-		},
+		"data": h.toResponse(message),
 	})
 }
 
@@ -112,9 +67,14 @@ func (h *MessageHandler) GetList(c *gin.Context) {
 		return
 	}
 
+	items := make([]*dto.MessageResponse, len(result))
+	for i, item := range result {
+		items[i] = h.toResponse(item)
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"data": gin.H{
-			"items": convertToMessageResponse(result),
+			"items": items,
 		},
 	})
 }
@@ -122,13 +82,6 @@ func (h *MessageHandler) GetList(c *gin.Context) {
 // GetByConversationID 根据对话ID获取消息
 func (h *MessageHandler) GetByConversationID(c *gin.Context) {
 	conversationID := c.Param("conversation_id")
-	if conversationID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "缺少对话ID参数",
-		})
-		return
-	}
-
 	convID, err := strconv.ParseUint(conversationID, 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -147,13 +100,17 @@ func (h *MessageHandler) GetByConversationID(c *gin.Context) {
 		return
 	}
 
+	items := make([]*dto.MessageResponse, len(result))
+	for i, item := range result {
+		items[i] = h.toResponse(item)
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"data": gin.H{
-			"items": convertToMessageResponse(result),
+			"items": items,
 		},
 	})
 }
-
 
 // GetByID 获取单个消息
 func (h *MessageHandler) GetByID(c *gin.Context) {
@@ -176,7 +133,7 @@ func (h *MessageHandler) GetByID(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"data": convertSingleMessageResponse(message),
+		"data": h.toResponse(message),
 	})
 }
 
@@ -214,15 +171,7 @@ func (h *MessageHandler) Update(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"data": dto.MessageResponse{
-			ID:             message.ID,
-			ConversationID: message.ConversationID,
-			Content:        message.Content,
-			Type:           message.Type,
-			Tokens:         message.Tokens,
-			Model:          message.Model,
-			CreatedAt:      message.CreatedAt.Format(common.TimeLayout),
-		},
+		"data": h.toResponse(message),
 	})
 }
 
@@ -250,4 +199,20 @@ func (h *MessageHandler) Delete(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"message": "删除成功",
 	})
+}
+
+func (h *MessageHandler) toResponse(item *service.MessageResponse) *dto.MessageResponse {
+	return &dto.MessageResponse{
+		ID:               item.ID,
+		ConversationID:   item.ConversationID,
+		Content:          item.Content,
+		ReasoningContent: item.ReasoningContent,
+		Sort:             item.Sort,
+		Type:             item.Type,
+		Tokens:           item.Tokens,
+		Model:            item.Model,
+		ParentID:         item.ParentID,
+		Metadata:         item.Metadata,
+		CreatedAt:        item.CreatedAt.Format(common.TimeLayout),
+	}
 }
