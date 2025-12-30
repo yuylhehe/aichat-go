@@ -8,8 +8,9 @@ import (
 	"strings"
 
 	"ai-chat/config"
+	"ai-chat/internal/model"
+	"ai-chat/internal/pkg/crypto"
 	"ai-chat/internal/repository"
-	"ai-chat/internal/service"
 )
 
 func main() {
@@ -47,16 +48,16 @@ func main() {
 	}
 
 	// 4. 检查邮箱是否已存在
-	var existingUser repository.User
+	var existingUser model.User
 	if err := db.Where("email = ?", email).First(&existingUser).Error; err == nil {
 		log.Fatalf("错误: 邮箱 '%s' 已被注册", email)
 	}
 
 	// 5. 创建用户 (使用由于 service 层提供的加密逻辑)
-	salt := service.GenerateSalt()
-	hashedPassword := service.HashPassword(password, salt)
+	salt := crypto.GenerateSalt()
+	hashedPassword := crypto.HashPassword(password, salt)
 
-	user := &repository.User{
+	user := &model.User{
 		Name:     name,
 		Email:    email,
 		Password: hashedPassword,
