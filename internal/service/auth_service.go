@@ -2,6 +2,7 @@ package service
 
 import (
 	"ai-chat/config"
+	"ai-chat/internal/common"
 	"ai-chat/internal/model"
 	"ai-chat/internal/pkg/crypto"
 	"ai-chat/internal/repository"
@@ -58,7 +59,7 @@ type AuthResponse struct {
 
 // GenerateJWT 生成JWT令牌
 func (s *AuthService) GenerateJWT(user *model.User) (*TokenResponse, error) {
-	expireTime := time.Now().Add(24 * time.Hour) // 24小时过期
+	expireTime := time.Now().Add(common.AccessTokenExpire)
 
 	claims := jwt.MapClaims{
 		"userId": user.ID,
@@ -75,7 +76,7 @@ func (s *AuthService) GenerateJWT(user *model.User) (*TokenResponse, error) {
 	}
 
 	// 刷新令牌（更长的过期时间）
-	expireTime = time.Now().Add(7 * 24 * time.Hour) // 7天过期
+	expireTime = time.Now().Add(common.RefreshTokenExpire)
 	claims["exp"] = expireTime.Unix()
 	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	refreshTokenString, err := refreshToken.SignedString([]byte(s.cfg.JWTSecret))

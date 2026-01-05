@@ -37,7 +37,7 @@ func main() {
 	// 初始化服务层
 	userService := service.NewUserService(userRepo)
 	authService := service.NewAuthService(userRepo, cfg)
-	conversationService := service.NewConversationService(conversationRepo, db)
+	conversationService := service.NewConversationService(conversationRepo, messageRepo)
 	messageService := service.NewMessageService(messageRepo, conversationRepo)
 	fixedPromptService := service.NewFixedPromptService(fixedPromptRepo)
 	aiService := service.NewAIService(messageRepo, cfg)

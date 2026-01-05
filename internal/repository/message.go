@@ -18,6 +18,7 @@ type MessageRepository interface {
 	NextSort(conversationID uint) (int, error)
 	FindByIDAndUserID(id, userID uint) (*model.Message, error)
 	FindByUserID(userID uint) ([]*model.Message, error)
+	CountByConversationID(conversationID uint) (int64, error)
 }
 
 type messageRepository struct {
@@ -106,4 +107,11 @@ func (r *messageRepository) FindByUserID(userID uint) ([]*model.Message, error) 
 		return nil, fmt.Errorf("查询消息列表失败: %w", err)
 	}
 	return messages, nil
+}
+func (r *messageRepository) CountByConversationID(conversationID uint) (int64, error) {
+	var count int64
+	if err := r.db.Model(&model.Message{}).Where("conversation_id = ?", conversationID).Count(&count).Error; err != nil {
+		return 0, fmt.Errorf("统计消息数量失败: %w", err)
+	}
+	return count, nil
 }

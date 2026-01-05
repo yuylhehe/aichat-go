@@ -2,6 +2,7 @@ package service
 
 import (
 	"ai-chat/config"
+	"ai-chat/internal/common"
 	"ai-chat/internal/repository"
 	"bufio"
 	"bytes"
@@ -52,8 +53,8 @@ type ChatResponse struct {
 
 // AIService AI服务
 type AIService struct {
-	repo repository.MessageRepository
-	cfg  *config.Config
+	repo   repository.MessageRepository
+	cfg    *config.Config
 	client *http.Client
 }
 
@@ -150,7 +151,7 @@ func (s *AIService) StreamChat(req *ChatRequest) (<-chan StreamResponse, <-chan 
 		req.Thinking = &struct {
 			Type string `json:"type"`
 		}{
-			Type: "enabled",
+			Type: common.ThinkingEnabled,
 		}
 	}
 
@@ -286,11 +287,11 @@ func (s *AIService) GetConversationHistory(conversationID uint) ([]Message, erro
 
 	var chatMessages []Message
 	for _, msg := range messages {
-		role := "assistant"
-		if msg.Type == "user" {
-			role = "user"
-		} else if msg.Type == "system" {
-			role = "system"
+		role := common.RoleAssistant
+		if msg.Type == common.RoleUser {
+			role = common.RoleUser
+		} else if msg.Type == common.RoleSystem {
+			role = common.RoleSystem
 		}
 
 		chatMessages = append(chatMessages, Message{

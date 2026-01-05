@@ -1,59 +1,29 @@
 package service
 
 import (
+	"ai-chat/internal/common"
+	"ai-chat/internal/dto"
 	"ai-chat/internal/model"
 	"ai-chat/internal/repository"
 	"fmt"
-	"time"
 )
 
 // MessageService 消息服务
 type MessageService struct {
-	repo            repository.MessageRepository
+	repo             repository.MessageRepository
 	conversationRepo repository.ConversationRepository
 }
 
 // NewMessageService 创建消息服务
 func NewMessageService(repo repository.MessageRepository, conversationRepo repository.ConversationRepository) *MessageService {
 	return &MessageService{
-		repo:            repo,
+		repo:             repo,
 		conversationRepo: conversationRepo,
 	}
 }
 
-// CreateMessageRequest 创建消息请求
-type CreateMessageRequest struct {
-	ConversationID   uint    `json:"conversationId" binding:"required"`
-	Content          string  `json:"content" binding:"required"`
-	ReasoningContent string  `json:"reasoningContent,omitempty"`
-	Type             string  `json:"type" binding:"required,oneof=system user assistant"`
-	Model            *string `json:"model,omitempty"`
-	ParentID         *uint   `json:"parentId,omitempty"`
-}
-
-// UpdateMessageRequest 更新消息请求
-type UpdateMessageRequest struct {
-	Content *string `json:"content,omitempty"`
-	Type    *string `json:"type,omitempty"`
-}
-
-// MessageResponse 消息响应
-type MessageResponse struct {
-	ID               uint      `json:"id"`
-	ConversationID   uint      `json:"conversationId"`
-	Content          string    `json:"content"`
-	ReasoningContent string    `json:"reasoningContent,omitempty"`
-	Sort             int       `json:"sort"`
-	Type             string    `json:"type"`
-	Tokens           *int      `json:"tokens"`
-	Model            *string   `json:"model"`
-	ParentID         *uint     `json:"parentId"`
-	Metadata         *string   `json:"metadata"`
-	CreatedAt        time.Time `json:"createdAt"`
-}
-
 // Create 创建消息
-func (s *MessageService) Create(userID uint, req *CreateMessageRequest) (*MessageResponse, error) {
+func (s *MessageService) Create(userID uint, req *dto.CreateMessageRequest) (*dto.MessageResponse, error) {
 	// 验证会话归属权
 	count, err := s.conversationRepo.CountByIDAndUserID(req.ConversationID, userID)
 	if err != nil {
@@ -92,7 +62,7 @@ func (s *MessageService) NextSort(conversationID uint) (int, error) {
 }
 
 // FindByConversationID 根据会话ID查找消息
-func (s *MessageService) FindByConversationID(userID, conversationID uint) ([]*MessageResponse, error) {
+func (s *MessageService) FindByConversationID(userID, conversationID uint) ([]*dto.MessageResponse, error) {
 	// 验证会话归属权
 	count, err := s.conversationRepo.CountByIDAndUserID(conversationID, userID)
 	if err != nil {
@@ -107,7 +77,7 @@ func (s *MessageService) FindByConversationID(userID, conversationID uint) ([]*M
 		return nil, err
 	}
 
-	items := make([]*MessageResponse, len(messages))
+	items := make([]*dto.MessageResponse, len(messages))
 	for i, msg := range messages {
 		items[i] = s.toResponse(msg)
 	}
@@ -116,13 +86,13 @@ func (s *MessageService) FindByConversationID(userID, conversationID uint) ([]*M
 }
 
 // FindAll 获取用户的消息列表
-func (s *MessageService) FindAll(userID uint) ([]*MessageResponse, error) {
+func (s *MessageService) FindAll(userID uint) ([]*dto.MessageResponse, error) {
 	messages, err := s.repo.FindByUserID(userID)
 	if err != nil {
 		return nil, err
 	}
 
-	items := make([]*MessageResponse, len(messages))
+	items := make([]*dto.MessageResponse, len(messages))
 	for i, msg := range messages {
 		items[i] = s.toResponse(msg)
 	}
@@ -131,7 +101,7 @@ func (s *MessageService) FindAll(userID uint) ([]*MessageResponse, error) {
 }
 
 // FindByID 根据ID查找消息
-func (s *MessageService) FindByID(userID, id uint) (*MessageResponse, error) {
+func (s *MessageService) FindByID(userID, id uint) (*dto.MessageResponse, error) {
 	message, err := s.repo.FindByIDAndUserID(id, userID)
 	if err != nil {
 		return nil, err
@@ -141,7 +111,7 @@ func (s *MessageService) FindByID(userID, id uint) (*MessageResponse, error) {
 }
 
 // Update 更新消息
-func (s *MessageService) Update(userID, id uint, req *UpdateMessageRequest) (*MessageResponse, error) {
+func (s *MessageService) Update(userID, id uint, req *dto.UpdateMessageRequest) (*dto.MessageResponse, error) {
 	message, err := s.repo.FindByIDAndUserID(id, userID)
 	if err != nil {
 		return nil, err
@@ -187,18 +157,26 @@ func (s *MessageService) DeleteByConversationID(conversationID uint) error {
 }
 
 // toResponse 转换为响应结构
-func (s *MessageService) toResponse(msg *model.Message) *MessageResponse {
-	return &MessageResponse{
+func (s *MessageService) toResponse(msg *model.Message) *dto.MessageResponse {
+	var tokens int
+	if msg.Tokens != nil {
+		tokens = *msg.Tokens
+	}
+	var modelName string
+	if msg.Model != nil {
+		modelName = *msg.Model
+	}
+	return &dto.MessageResponse{
 		ID:               msg.ID,
 		ConversationID:   msg.ConversationID,
 		Content:          msg.Content,
 		ReasoningContent: msg.ReasoningContent,
 		Sort:             msg.Sort,
 		Type:             msg.Type,
-		Tokens:           msg.Tokens,
-		Model:            msg.Model,
+		Tokens:           tokens,
+		Model:            modelName,
 		ParentID:         msg.ParentID,
 		Metadata:         msg.Metadata,
-		CreatedAt:        msg.CreatedAt,
+		CreatedAt:        msg.CreatedAt.Format(common.TimeLayout),
 	}
 }

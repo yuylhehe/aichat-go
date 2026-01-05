@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"ai-chat/internal/common"
 	"ai-chat/internal/dto"
 	"ai-chat/internal/middleware"
 	"ai-chat/internal/service"
@@ -82,10 +83,7 @@ type PromptFilterResult struct {
 func (h *AIHandler) SendMessage(c *gin.Context) {
 	var req ChatRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "请求参数错误",
-			"details": err.Error(),
-		})
+		SendBadRequest(c, "请求参数错误: "+err.Error())
 		return
 	}
 
@@ -96,16 +94,13 @@ func (h *AIHandler) SendMessage(c *gin.Context) {
 	if req.ConversationID != nil {
 		conversationID = *req.ConversationID
 	} else {
-		conversationReq := &service.CreateConversationRequest{
+		conversationReq := &dto.CreateConversationRequest{
 			Name:   req.Message[:min(len(req.Message), 50)],
 			UserID: userID,
 		}
 		conversation, err := h.conversationService.Create(conversationReq)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error":   "创建会话失败",
-				"details": err.Error(),
-			})
+			SendInternalError(c, "创建会话失败: "+err.Error())
 			return
 		}
 		conversationID = conversation.ID
@@ -123,10 +118,7 @@ func (h *AIHandler) SendMessage(c *gin.Context) {
 	// 构建消息列表
 	chatMessages, err := h.buildChatMessages(userID, conversationID, systemPrompt, req.Message)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "获取消息历史失败",
-			"details": err.Error(),
-		})
+		SendInternalError(c, "获取消息历史失败: "+err.Error())
 		return
 	}
 
@@ -139,68 +131,59 @@ func (h *AIHandler) SendMessage(c *gin.Context) {
 
 	result, err := h.aiService.ChatCompletion(chatReq)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "AI服务调用失败",
-			"details": err.Error(),
-		})
+		SendInternalError(c, "AI服务调用失败: "+err.Error())
 		return
 	}
 
 	// 保存用户消息
-	userMessage := &service.CreateMessageRequest{
+	userMessage := &dto.CreateMessageRequest{
 		ConversationID: conversationID,
 		Content:        req.Message,
-		Type:           "user",
+		Type:           common.RoleUser,
 	}
 	_, err = h.messageService.Create(userID, userMessage)
 	if err != nil {
 		// 即使保存消息失败，也返回AI回复
-		c.JSON(http.StatusOK, gin.H{
-			"data": ChatResponse{
-				ID:      "resp_" + time.Now().Format("20060102150405"),
-				Object:  "chat.completion",
-				Created: time.Now().Unix(),
-				Model:   *req.Model,
-				Choices: result.Choices,
-				Usage:   result.Usage,
-			},
-		})
-		return
-	}
-
-	// 保存AI回复
-	if len(result.Choices) > 0 {
-		assistantMessage := &service.CreateMessageRequest{
-			ConversationID: conversationID,
-			Content:        result.Choices[0].Message.Content,
-			Type:           "assistant",
-			Model:          req.Model,
-		}
-		_, err = h.messageService.Create(userID, assistantMessage)
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"data": ChatResponse{
-					ID:      "resp_" + time.Now().Format("20060102150405"),
-					Object:  "chat.completion",
-					Created: time.Now().Unix(),
-					Model:   *req.Model,
-					Choices: result.Choices,
-					Usage:   result.Usage,
-				},
-			})
-			return
-		}
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"data": ChatResponse{
+		SendSuccess(c, ChatResponse{
 			ID:      "resp_" + time.Now().Format("20060102150405"),
 			Object:  "chat.completion",
 			Created: time.Now().Unix(),
 			Model:   *req.Model,
 			Choices: result.Choices,
 			Usage:   result.Usage,
-		},
+		})
+		return
+	}
+
+	// 保存AI回复
+	if len(result.Choices) > 0 {
+		assistantMessage := &dto.CreateMessageRequest{
+			ConversationID: conversationID,
+			Content:        result.Choices[0].Message.Content,
+			Type:           common.RoleAssistant,
+			Model:          req.Model,
+		}
+		_, err = h.messageService.Create(userID, assistantMessage)
+		if err != nil {
+			SendSuccess(c, ChatResponse{
+				ID:      "resp_" + time.Now().Format("20060102150405"),
+				Object:  "chat.completion",
+				Created: time.Now().Unix(),
+				Model:   *req.Model,
+				Choices: result.Choices,
+				Usage:   result.Usage,
+			})
+			return
+		}
+	}
+
+	SendSuccess(c, ChatResponse{
+		ID:      "resp_" + time.Now().Format("20060102150405"),
+		Object:  "chat.completion",
+		Created: time.Now().Unix(),
+		Model:   *req.Model,
+		Choices: result.Choices,
+		Usage:   result.Usage,
 	})
 }
 
@@ -208,10 +191,7 @@ func (h *AIHandler) SendMessage(c *gin.Context) {
 func (h *AIHandler) StreamChat(c *gin.Context) {
 	var req StreamChatRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "请求参数错误",
-			"details": err.Error(),
-		})
+		SendBadRequest(c, "请求参数错误: "+err.Error())
 		return
 	}
 
@@ -222,33 +202,27 @@ func (h *AIHandler) StreamChat(c *gin.Context) {
 	if req.ConversationID != nil {
 		conversationID = *req.ConversationID
 	} else {
-		conversationReq := &service.CreateConversationRequest{
+		conversationReq := &dto.CreateConversationRequest{
 			Name:   req.Message[:min(len(req.Message), 50)],
 			UserID: userID,
 		}
 		conversation, err := h.conversationService.Create(conversationReq)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error":   "创建会话失败",
-				"details": err.Error(),
-			})
+			SendInternalError(c, "创建会话失败: "+err.Error())
 			return
 		}
 		conversationID = conversation.ID
 	}
 
 	// 保存用户消息
-	userMessage := &service.CreateMessageRequest{
+	userMessage := &dto.CreateMessageRequest{
 		ConversationID: conversationID,
 		Content:        req.Message,
-		Type:           "user",
+		Type:           common.RoleUser,
 	}
 	_, err := h.messageService.Create(userID, userMessage)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "保存用户消息失败",
-			"details": err.Error(),
-		})
+		SendInternalError(c, "保存用户消息失败: "+err.Error())
 		return
 	}
 
@@ -265,10 +239,7 @@ func (h *AIHandler) StreamChat(c *gin.Context) {
 	// 构建消息列表
 	chatMessages, err := h.buildChatMessages(userID, conversationID, systemPrompt, req.Message)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "获取消息历史失败",
-			"details": err.Error(),
-		})
+		SendInternalError(c, "获取消息历史失败: "+err.Error())
 		return
 	}
 
@@ -281,20 +252,12 @@ func (h *AIHandler) StreamChat(c *gin.Context) {
 		Thinking:    req.Thinking,
 	}
 
-	h.processStreamResponse(c, userID, conversationID, chatReq, "message")
+	h.processStreamResponse(c, userID, conversationID, chatReq, common.SSETypeMessage)
 }
 
 // GetModels 获取可用模型列表
 func (h *AIHandler) GetModels(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"data": []string{
-			"gpt-3.5-turbo",
-			"gpt-3.5-turbo-16k",
-			"gpt-4",
-			"gpt-4-turbo",
-			"gpt-4-turbo-preview",
-		},
-	})
+	SendSuccess(c, common.Models)
 }
 
 // StreamChatByConversationID 根据会话ID进行流式聊天
@@ -302,17 +265,13 @@ func (h *AIHandler) StreamChatByConversationID(c *gin.Context) {
 	// 获取会话ID
 	conversationIDStr := c.Param("conversationId")
 	if conversationIDStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "会话ID不能为空",
-		})
+		SendBadRequest(c, "会话ID不能为空")
 		return
 	}
 
 	conversationID, err := strconv.ParseUint(conversationIDStr, 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "无效的会话ID",
-		})
+		SendBadRequest(c, "无效的会话ID")
 		return
 	}
 
@@ -324,10 +283,7 @@ func (h *AIHandler) StreamChatByConversationID(c *gin.Context) {
 	// 构建消息列表
 	chatMessages, err := h.buildChatMessages(userID, uint(conversationID), "", prompt)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "获取消息历史失败",
-			"details": err.Error(),
-		})
+		SendInternalError(c, "获取消息历史失败: "+err.Error())
 		return
 	}
 
@@ -349,7 +305,7 @@ func (h *AIHandler) StreamChatByConversationID(c *gin.Context) {
 		}
 	}
 
-	h.processStreamResponse(c, userID, uint(conversationID), chatReq, "token")
+	h.processStreamResponse(c, userID, uint(conversationID), chatReq, common.SSETypeToken)
 }
 
 // Helper functions
@@ -372,7 +328,7 @@ func (h *AIHandler) buildChatMessages(userID, conversationID uint, systemPrompt 
 	var chatMessages []service.Message
 	if systemPrompt != "" {
 		chatMessages = append(chatMessages, service.Message{
-			Role:    "system",
+			Role:    common.RoleSystem,
 			Content: systemPrompt,
 		})
 	}
@@ -388,7 +344,7 @@ func (h *AIHandler) buildChatMessages(userID, conversationID uint, systemPrompt 
 	// 添加当前用户消息
 	if currentMessage != "" {
 		chatMessages = append(chatMessages, service.Message{
-			Role:    "user",
+			Role:    common.RoleUser,
 			Content: currentMessage,
 		})
 	}
@@ -426,11 +382,11 @@ func (h *AIHandler) processStreamResponse(c *gin.Context, userID, conversationID
 			return
 		}
 
-		msgReq := &service.CreateMessageRequest{
+		msgReq := &dto.CreateMessageRequest{
 			ConversationID:   conversationID,
 			Content:          fullContent,
 			ReasoningContent: fullReasoningContent,
-			Type:             "assistant",
+			Type:             common.RoleAssistant,
 			Model:            chatReq.Model,
 		}
 
@@ -457,7 +413,7 @@ Loop:
 				continue
 			}
 
-			if response.Type == "content" {
+			if response.Type == common.SSETypeContent {
 				fullContent += response.Content
 			}
 			chunkCount++
@@ -470,9 +426,9 @@ Loop:
 				"conversationId": conversationID,
 			}
 
-			if response.Type == "reasoning" {
+			if response.Type == common.SSETypeReasoning {
 				fullReasoningContent += response.Content
-				data["type"] = "reasoning"
+				data["type"] = common.SSETypeReasoning
 			}
 
 			jsonData, _ := json.Marshal(data)
@@ -492,7 +448,7 @@ Loop:
 
 			log.Printf("Stream error: %v", err)
 			errorData := map[string]interface{}{
-				"type":    "error",
+				"type":    common.SSETypeError,
 				"message": "AI服务调用失败",
 				"details": err.Error(),
 			}
@@ -509,7 +465,7 @@ Loop:
 
 	// 发送完成信号
 	finishData := map[string]interface{}{
-		"type":           "finish",
+		"type":           common.SSETypeFinish,
 		"conversationId": conversationID,
 		"content":        fullContent,
 		"chunkCount":     chunkCount,

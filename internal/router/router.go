@@ -84,7 +84,7 @@ func (r *Router) setupRoutes() {
 		auth := v1.Group("/auth")
 		{
 			// 公网环境不注册
-			//auth.POST("/register", r.authHandler.Register)
+			auth.POST("/register", r.authHandler.Register)
 			auth.POST("/login", r.authHandler.Login)
 			auth.POST("/refresh", r.authHandler.RefreshToken)
 			auth.GET("/me",

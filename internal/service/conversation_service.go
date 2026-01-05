@@ -1,65 +1,29 @@
 package service
 
 import (
+	"ai-chat/internal/common"
+	"ai-chat/internal/dto"
 	"ai-chat/internal/model"
 	"ai-chat/internal/repository"
 	"fmt"
-	"time"
-
-	"gorm.io/gorm"
 )
 
 // ConversationService 会话服务
 type ConversationService struct {
-	repo repository.ConversationRepository
-	db   *gorm.DB // 临时保留，用于消息计数（后续重构 message 时会移除）
+	repo        repository.ConversationRepository
+	messageRepo repository.MessageRepository
 }
 
 // NewConversationService 创建会话服务
-// 参数：
-//   - repo: ConversationRepository 接口实现
-//   - db: gorm.DB 实例（临时保留，用于消息计数）
-func NewConversationService(repo repository.ConversationRepository, db *gorm.DB) *ConversationService {
+func NewConversationService(repo repository.ConversationRepository, messageRepo repository.MessageRepository) *ConversationService {
 	return &ConversationService{
-		repo: repo,
-		db:   db,
+		repo:        repo,
+		messageRepo: messageRepo,
 	}
 }
 
-// CreateConversationRequest 创建会话请求
-type CreateConversationRequest struct {
-	Name         string   `json:"name" binding:"required,min=1,max=255"`
-	UserID       uint     `json:"userId" binding:"required"`
-	SystemPrompt *string  `json:"systemPrompt,omitempty"`
-	Model        *string  `json:"model,omitempty"`
-	Temperature  *float64 `json:"temperature,omitempty"`
-}
-
-// UpdateConversationRequest 更新会话请求
-type UpdateConversationRequest struct {
-	Name         *string  `json:"name,omitempty"`
-	SystemPrompt *string  `json:"systemPrompt,omitempty"`
-	Model        *string  `json:"model,omitempty"`
-	Temperature  *float64 `json:"temperature,omitempty"`
-	IsActive     *bool    `json:"isActive,omitempty"`
-}
-
-// ConversationResponse 会话响应
-type ConversationResponse struct {
-	ID           uint      `json:"id"`
-	Name         string    `json:"name"`
-	UserID       uint      `json:"userId"`
-	IsActive     bool      `json:"isActive"`
-	SystemPrompt *string   `json:"systemPrompt"`
-	Model        *string   `json:"model"`
-	Temperature  *float64  `json:"temperature"`
-	CreatedAt    time.Time `json:"createdAt"`
-	UpdatedAt    time.Time `json:"updatedAt"`
-	Messages     int64     `json:"messageCount"`
-}
-
 // Create 创建会话
-func (s *ConversationService) Create(req *CreateConversationRequest) (*ConversationResponse, error) {
+func (s *ConversationService) Create(req *dto.CreateConversationRequest) (*dto.ConversationResponse, error) {
 	conversation := &model.Conversation{
 		Name:         req.Name,
 		UserID:       req.UserID,
@@ -76,29 +40,29 @@ func (s *ConversationService) Create(req *CreateConversationRequest) (*Conversat
 }
 
 // FindByID 根据ID查找会话
-func (s *ConversationService) FindByID(userID, id uint) (*ConversationResponse, error) {
+func (s *ConversationService) FindByID(userID, id uint) (*dto.ConversationResponse, error) {
 	conversation, err := s.repo.FindByIDAndUserID(id, userID)
 	if err != nil {
 		return nil, err
 	}
 
-	// 获取消息数量（临时使用 db，后续重构 message 后会改为使用 messageRepo）
-	messageCount := s.countMessages(id)
+	// 获取消息数量
+	messageCount, _ := s.messageRepo.CountByConversationID(id)
 
 	return s.toResponse(conversation, messageCount), nil
 }
 
 // FindByUserID 根据用户ID查找会话
-func (s *ConversationService) FindByUserID(userID uint, q string) ([]*ConversationResponse, error) {
+func (s *ConversationService) FindByUserID(userID uint, q string) ([]*dto.ConversationResponse, error) {
 	conversations, err := s.repo.FindByUserID(userID, q)
 	if err != nil {
 		return nil, err
 	}
 
 	// 获取每个会话的消息数量
-	items := make([]*ConversationResponse, len(conversations))
+	items := make([]*dto.ConversationResponse, len(conversations))
 	for i, conv := range conversations {
-		messageCount := s.countMessages(conv.ID)
+		messageCount, _ := s.messageRepo.CountByConversationID(conv.ID)
 		items[i] = s.toResponse(conv, messageCount)
 	}
 
@@ -106,16 +70,16 @@ func (s *ConversationService) FindByUserID(userID uint, q string) ([]*Conversati
 }
 
 // FindAll 查找所有会话
-func (s *ConversationService) FindAll(q string) ([]*ConversationResponse, error) {
+func (s *ConversationService) FindAll(q string) ([]*dto.ConversationResponse, error) {
 	conversations, err := s.repo.FindAll(q)
 	if err != nil {
 		return nil, err
 	}
 
 	// 获取每个会话的消息数量
-	items := make([]*ConversationResponse, len(conversations))
+	items := make([]*dto.ConversationResponse, len(conversations))
 	for i, conv := range conversations {
-		messageCount := s.countMessages(conv.ID)
+		messageCount, _ := s.messageRepo.CountByConversationID(conv.ID)
 		items[i] = s.toResponse(conv, messageCount)
 	}
 
@@ -123,7 +87,7 @@ func (s *ConversationService) FindAll(q string) ([]*ConversationResponse, error)
 }
 
 // Update 更新会话
-func (s *ConversationService) Update(userID, id uint, req *UpdateConversationRequest) (*ConversationResponse, error) {
+func (s *ConversationService) Update(userID, id uint, req *dto.UpdateConversationRequest) (*dto.ConversationResponse, error) {
 	conversation, err := s.repo.FindByIDAndUserID(id, userID)
 	if err != nil {
 		return nil, err
@@ -157,7 +121,7 @@ func (s *ConversationService) Update(userID, id uint, req *UpdateConversationReq
 
 	// 重新获取更新后的数据
 	conversation, _ = s.repo.FindByID(id)
-	messageCount := s.countMessages(id)
+	messageCount, _ := s.messageRepo.CountByConversationID(id)
 
 	return s.toResponse(conversation, messageCount), nil
 }
@@ -173,8 +137,8 @@ func (s *ConversationService) Delete(userID, id uint) error {
 		return fmt.Errorf("会话不存在或无权删除")
 	}
 
-	// 先删除相关的消息（临时使用 db，后续重构 message 后会改为使用 messageRepo）
-	if err := s.db.Where("conversation_id = ?", id).Delete(&model.Message{}).Error; err != nil {
+	// 先删除相关的消息
+	if err := s.messageRepo.DeleteByConversationID(id); err != nil {
 		return fmt.Errorf("删除会话消息失败: %w", err)
 	}
 
@@ -188,26 +152,12 @@ func (s *ConversationService) Delete(userID, id uint) error {
 
 // NextSort 获取下一个消息排序值
 func (s *ConversationService) NextSort(conversationID uint) (int, error) {
-	var maxSort int
-	err := s.db.Model(&model.Message{}).
-		Where("conversation_id = ?", conversationID).
-		Pluck("COALESCE(MAX(sort), 0)", &maxSort).Error
-	if err != nil {
-		return 0, fmt.Errorf("查询最大排序值失败: %w", err)
-	}
-	return maxSort + 1, nil
-}
-
-// countMessages 统计会话消息数量（内部方法）
-func (s *ConversationService) countMessages(conversationID uint) int64 {
-	var count int64
-	s.db.Model(&model.Message{}).Where("conversation_id = ?", conversationID).Count(&count)
-	return count
+	return s.messageRepo.NextSort(conversationID)
 }
 
 // toResponse 转换为响应结构
-func (s *ConversationService) toResponse(conv *model.Conversation, messageCount int64) *ConversationResponse {
-	return &ConversationResponse{
+func (s *ConversationService) toResponse(conv *model.Conversation, messageCount int64) *dto.ConversationResponse {
+	return &dto.ConversationResponse{
 		ID:           conv.ID,
 		Name:         conv.Name,
 		UserID:       conv.UserID,
@@ -215,8 +165,8 @@ func (s *ConversationService) toResponse(conv *model.Conversation, messageCount 
 		SystemPrompt: conv.SystemPrompt,
 		Model:        conv.Model,
 		Temperature:  conv.Temperature,
-		CreatedAt:    conv.CreatedAt,
-		UpdatedAt:    conv.UpdatedAt,
+		CreatedAt:    conv.CreatedAt.Format(common.TimeLayout),
+		UpdatedAt:    conv.UpdatedAt.Format(common.TimeLayout),
 		Messages:     messageCount,
 	}
 }

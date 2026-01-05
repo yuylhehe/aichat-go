@@ -21,11 +21,6 @@ func NewUserService(repo repository.UserRepository) *UserService {
 	return &UserService{repo: repo}
 }
 
-// userRepository 用户仓库实现
-type userRepository struct {
-	repo repository.UserRepository
-}
-
 // Create 创建用户
 func (s *UserService) Create(user *model.User) error {
 	return s.repo.Create(user)
