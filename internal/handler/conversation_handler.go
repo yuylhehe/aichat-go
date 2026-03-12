@@ -35,13 +35,7 @@ func (h *ConversationHandler) Create(c *gin.Context) {
 	}
 
 	userID := middleware.GetUserID(c)
-
-	conversationReq := &dto.CreateConversationRequest{
-		Name:   req.Name,
-		UserID: userID,
-	}
-
-	conversation, err := h.conversationService.Create(conversationReq)
+	conversation, err := h.conversationService.Create(userID, &req)
 	if err != nil {
 		SendInternalError(c, "创建对话失败")
 		return

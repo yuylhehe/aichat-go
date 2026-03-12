@@ -21,8 +21,7 @@ func TestConversationService_Create(t *testing.T) {
 
 	t.Run("成功创建会话", func(t *testing.T) {
 		req := &dto.CreateConversationRequest{
-			Name:   "测试会话",
-			UserID: 1,
+			Name: "测试会话",
 		}
 
 		mockConvRepo.On("Create", mock.AnythingOfType("*model.Conversation")).
@@ -34,7 +33,7 @@ func TestConversationService_Create(t *testing.T) {
 			}).
 			Return(nil).Once()
 
-		result, err := svc.Create(req)
+		result, err := svc.Create(1, req)
 
 		assert.NoError(t, err)
 		assert.NotNil(t, result)
@@ -45,14 +44,13 @@ func TestConversationService_Create(t *testing.T) {
 
 	t.Run("创建失败-数据库错误", func(t *testing.T) {
 		req := &dto.CreateConversationRequest{
-			Name:   "测试会话",
-			UserID: 1,
+			Name: "测试会话",
 		}
 
 		mockConvRepo.On("Create", mock.AnythingOfType("*model.Conversation")).
 			Return(errors.New("数据库错误")).Once()
 
-		result, err := svc.Create(req)
+		result, err := svc.Create(1, req)
 
 		assert.Error(t, err)
 		assert.Nil(t, result)

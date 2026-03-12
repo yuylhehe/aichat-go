@@ -95,10 +95,11 @@ func (h *AIHandler) SendMessage(c *gin.Context) {
 		conversationID = *req.ConversationID
 	} else {
 		conversationReq := &dto.CreateConversationRequest{
-			Name:   req.Message[:min(len(req.Message), 50)],
-			UserID: userID,
+			Name:        req.Message[:min(len(req.Message), 50)],
+			Model:       req.Model,
+			Temperature: req.Temperature,
 		}
-		conversation, err := h.conversationService.Create(conversationReq)
+		conversation, err := h.conversationService.Create(userID, conversationReq)
 		if err != nil {
 			SendInternalError(c, "创建会话失败: "+err.Error())
 			return
@@ -203,10 +204,11 @@ func (h *AIHandler) StreamChat(c *gin.Context) {
 		conversationID = *req.ConversationID
 	} else {
 		conversationReq := &dto.CreateConversationRequest{
-			Name:   req.Message[:min(len(req.Message), 50)],
-			UserID: userID,
+			Name:        req.Message[:min(len(req.Message), 50)],
+			Model:       req.Model,
+			Temperature: req.Temperature,
 		}
-		conversation, err := h.conversationService.Create(conversationReq)
+		conversation, err := h.conversationService.Create(userID, conversationReq)
 		if err != nil {
 			SendInternalError(c, "创建会话失败: "+err.Error())
 			return

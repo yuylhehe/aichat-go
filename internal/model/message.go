@@ -27,11 +27,6 @@ type Message struct {
 	Replies      []Message    `json:"replies,omitempty" gorm:"foreignKey:ParentID"`
 }
 
-// TableName 指定表名
-func (Message) TableName() string {
-	return "message"
-}
-
 // BeforeCreate 创建前钩子
 func (m *Message) BeforeCreate(tx *gorm.DB) error {
 	if m.Sort == 0 {

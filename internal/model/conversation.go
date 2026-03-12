@@ -24,11 +24,6 @@ type Conversation struct {
 	Messages []Message `json:"messages,omitempty" gorm:"foreignKey:ConversationID"`
 }
 
-// TableName 指定表名
-func (Conversation) TableName() string {
-	return "conversation"
-}
-
 // BeforeCreate 创建前钩子
 func (c *Conversation) BeforeCreate(tx *gorm.DB) error {
 	c.IsActive = true

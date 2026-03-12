@@ -18,11 +18,6 @@ type FixedPrompt struct {
 	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`
 }
 
-// TableName 指定表名
-func (FixedPrompt) TableName() string {
-	return "fixed_prompt"
-}
-
 // BeforeCreate 创建前钩子
 func (fp *FixedPrompt) BeforeCreate(tx *gorm.DB) error {
 	fp.IsActive = true

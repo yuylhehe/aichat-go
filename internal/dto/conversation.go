@@ -3,7 +3,6 @@ package dto
 // CreateConversationRequest 创建会话请求
 type CreateConversationRequest struct {
 	Name         string   `json:"name" binding:"required,min=1,max=255"`
-	UserID       uint     `json:"userId" binding:"required"`
 	SystemPrompt *string  `json:"systemPrompt,omitempty"`
 	Model        *string  `json:"model,omitempty"`
 	Temperature  *float64 `json:"temperature,omitempty"`

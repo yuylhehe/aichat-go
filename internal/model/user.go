@@ -23,10 +23,6 @@ type User struct {
 	Conversations []Conversation `json:"conversations,omitempty" gorm:"foreignKey:UserID"`
 }
 
-func (User) TableName() string {
-	return "user"
-}
-
 // BeforeCreate 创建前钩子
 func (u *User) BeforeCreate(tx *gorm.DB) error {
 	u.IsActive = true

@@ -23,10 +23,10 @@ func NewConversationService(repo repository.ConversationRepository, messageRepo 
 }
 
 // Create 创建会话
-func (s *ConversationService) Create(req *dto.CreateConversationRequest) (*dto.ConversationResponse, error) {
+func (s *ConversationService) Create(userID uint, req *dto.CreateConversationRequest) (*dto.ConversationResponse, error) {
 	conversation := &model.Conversation{
 		Name:         req.Name,
-		UserID:       req.UserID,
+		UserID:       userID,
 		SystemPrompt: req.SystemPrompt,
 		Model:        req.Model,
 		Temperature:  req.Temperature,
